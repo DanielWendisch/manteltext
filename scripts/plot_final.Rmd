@@ -1,0 +1,384 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(patchwork)
+library(cowplot)
+library(tidyverse)
+library(Seurat)
+library(magrittr)
+library(ggpubr)
+library(gridGraphics)
+library(ggdendro)
+library(readxl)
+library(janitor)
+
+source("functions_bal_macrophages.R")
+source("initialize_bal_data.R")
+```
+
+```{r}
+size_ <- 6
+umap_plot <- DimPlot(BAL_macrophages )
+
+umap_plot <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_point(aes(alpha=0.2))+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)
+umap_plot
+markers_cluster_tbl <-  read_rds("../data/markers_cluster_tbl.rds")
+manuallly_sel_2groups <- c("ITGAM", "CD14", "CCR1", "CSF1R","FABP4","INHBA","FFAR4",  "PPARG", "PCOLCE2")
+top_markers_cluster <- markers_cluster_tbl %>% mutate(clus=factor(clus, levels = cluster_names))%>%group_by(clus) %>% slice_max(summary.AUC,n= 5)%>% arrange(.by_group = ) %>%  pull(gene) %>% unique()
+dot_plot <- dot_plot_cluster(unique(c(manuallly_sel_2groups, top_markers_cluster)))+theme(legend.position = "none", axis.text.x = element_text(size_),axis.text.y = element_text(size_))
+a1 <- umap_plot + dot_plot+plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 8))
+
+a1
+```
+```{r}
+ umap_plot$data %>% mutate(na=rep(c(NA,NA,NA,1),nrow(umap_plot$data)/4)) %>% mutate(umap_red=UMAP_1*na,umap_red=UMAP_2*na)
+
+ umap_plot$data %>% mutate(na=rep(c(NA,NA,NA,1),nrow(umap_plot$data)/4)) %>% mutate(umap_red_1=UMAP_1*na,umap_red_2=UMAP_2*na) %>% 
+   ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "mitre")+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)+ geom_point(aes(x= umap_red_1, y=umap_red_2, alpha=0.2))
+
+ #ggsave("umap_dens.png")
+
+ umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "bevel")+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)
+ 
+  umap_dens <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "round")+
+  theme(legend.position = "none")  +theme_2 +  
+    ggplot2::scale_color_manual(values = color.cluster)+xlim(-10,8)+ylim(-5,5)
+  umap_dens
+```
+
+
+```{r warning=FALSE}
+x_lim_pc_and_loadings <- c(-0.5,0.33)#
+y_lim_pc_and_loadings <- c(-0.4,0.15)
+text_size <- function(size_=6){
+  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
+
+}
+
+
+#text_size <- . &  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
+
+
+
+
+###pca-plot with loadings
+pc1_pc2 <- DimPlot(BAL_macrophages, reduction = "pca", pt.size = 1.1, dims = c(1:2), )
+
+pc1_pc2 <- pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_point(aes(alpha=0.2))+# xlim(x_lim_pc_and_loadings) + ylim(y_lim_pc_and_loadings) + 
+  theme(legend.position = "none")  +theme_2 + xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)
+
+pc1_pc2_titeled <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_point(aes(alpha=0.2))+# xlim(x_lim_pc_and_loadings) + ylim(y_lim_pc_and_loadings) + 
+  theme(legend.position = "none")  +theme_2_titeled + xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)+ggtitle("PC1 vs. PC2")
+
+
+
+
+# pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
+#   APOC1_pc1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+#   HLA_d_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+#   S100A8_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))
+
+
+
+#     ggplot2::scale_color_manual(values = color.cluster)+ xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)
+#   umap_dens
+#   
+# nual(values = color.cluster)+ggtitle("PC3 vs. PC4")
+# pc3_pc4_titeled_dens
+```
+
+
+
+
+
+```{r warning=FALSE}
+
+############# gene loadings
+APOC1_pc1 <- pca_loadings_plot(feature = "APOC1")+theme_minimal()+theme(legend.position = "none")+ xlim(x_lim_pc_and_loadings)+theme_1+
+  ggplot2::scale_color_manual(values = color.cluster)
+HLA_d_pca_1 <- pca_loadings_plot_meta_data(feature ="HLA_d")+ xlim(x_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)
+S100A8_pca_1 <- pca_loadings_plot(feature ="S100A8")+ xlim(x_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)
+
+CD163_pc2 <- pca_loadings_plot_90_titled(feature = "CD163",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings) +ggtitle("CD163")+theme_2_titeled
+LGMN_pc2 <- pca_loadings_plot_90_titled(feature = "LGMN",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings)+ggtitle("LGMN")
+LYZ_pc2 <- pca_loadings_plot_90_titled(feature = "LYZ",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings)+ggtitle("LYZ")
+##########cluster dendrogram
+
+BAL_macrophages <- BuildClusterTree(object=BAL_macrophages, assay = "RNA")
+
+hclust_BAL <- my_hclust_BuildCLusterTree(BAL_macrophages, assay = "RNA")
+clust_dendro <- ggdendrogram(hclust_BAL)+theme(axis.text.x =element_text(size = size_),
+                                               axis.text.y =element_blank(),
+                                               title = element_blank())
+###########
+pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
+  APOC1_pc1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+  HLA_d_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+  S100A8_pca_1+ plot_spacer()+plot_spacer()+clust_dendro+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))
+
+
+PC_1_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_1)  %>% mutate(pc_squared=((PC_1)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_1<0,"negative", "positive"), gene= fct_reorder(gene,PC_1)) %>% arrange(PC_1) %>% ggplot(aes(PC_1, gene,color=PC_1)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_1, y=gene,yend=gene), size=1)+theme_bw() +
+  scale_color_distiller(
+      palette = "RdYlBu", direction = -1)+
+  theme(legend.position = "none", axis.title = element_blank())
+
+PC_2_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_2)  %>% mutate(pc_squared=((PC_2)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_2<0,"negative", "positive"), gene= fct_reorder(gene,PC_2)) %>% arrange(PC_2) %>% ggplot(aes(PC_2, gene,color=PC_2)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_2, y=gene,yend=gene), size=1) +theme_bw() +
+  scale_color_distiller(palette = "RdYlBu", direction = -1)+
+  theme(legend.position = "none", axis.title = element_blank())
+
+x <- PC_1_lollypop+
+  PC_2_lollypop+
+  wrap_elements(clust_dendro&  theme(text = element_text(size = size_), axis.text =element_text(size = size_) ))+
+  plot_layout(guides = "collect", widths = c(1), heights = c(6))&  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
+
+
+layout_dings <- "
+AAABBB
+AAABBB
+AAABBB
+CCCDEF
+CCCDEF
+CCCDEF
+GGGHHH
+IIIHHH
+JJJHHH
+"
+a3 <-
+  umap_plot+#A
+  wrap_elements(dot_plot)+#B
+  pc1_pc2_titeled+#C
+  CD163_pc2+#D
+  LGMN_pc2+#E
+  LYZ_pc2 +#F
+  HLA_d_pca_1+#G
+  wrap_elements(x)+#H
+  S100A8_pca_1+#J
+  APOC1_pc1+#J
+  plot_layout(design = layout_dings, guides = "collect") +
+  plot_annotation(tag_levels = 'A') &  
+  theme(text = element_text(size = size_),
+        axis.text.y  =element_text(size = size_),
+        axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) )
+
+a3 <-
+  umap_dens+#A
+  wrap_elements(dot_plot)+#B
+  pc1_pc2_titeled+#C
+  CD163_pc2+#D
+  LGMN_pc2+#E
+  LYZ_pc2 +#F
+  HLA_d_pca_1+#G
+  wrap_elements(x)+#H
+  S100A8_pca_1+#J
+  APOC1_pc1+#J
+  plot_layout(design = layout_dings, guides = "collect") +
+  plot_annotation(tag_levels = 'A') &  
+  theme(text = element_text(size = size_),
+        axis.text.y  =element_text(size = size_),
+        axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) )
+
+
+a3
+ggsave("../output/BAL_comp.tiff",units = "cm")
+```
+
+```{r}
+
+tf <- read_excel("DatabaseExtract_v_1.01.xlsx")
+tf_genes <- tf %>% clean_names() %>%  filter(is_tf=="Yes") %>% pull(hgnc_symbol) %>% unique()
+#matrix_mod<-BAL_macrophages_small_1@assays$RNA@data %>% as.matrix()
+# matrix_mod<-BAL_macrophages@assays$RNA@data[rowSums(BAL_macrophages@assays$RNA@data)>5,] %>% as.matrix()
+#matrix_mod <- matrix_mod[rowSums(matrix_mod)>5,]
+# rownames(matrix_mod) <- rownames(matrix_mod) %>% genifiy_2()
+# cor_list <- list()
+"CTSL", "CD163", "HLA-DRB1","FABP4","APOE", "TGFBI","TGFB1" )
+genes <- c("CD14","APOC1", "LGMN")
+genes <- c("CD14","S100A8",  "APOC1", "HLA-DRB1", "HLA-DQA1", "C1QA", "LGMN", "CD163")
+
+
+# for (gene_name in genes) {
+#   #gene_name <- "CSF1R"
+#   gene<-as.numeric(matrix_mod[gene_name,])
+# correlations<-apply(matrix_mod,1,function(x){cor(gene,x)})
+# correlations_tbl <- tibble(gene=names(correlations), cor=correlations, cor_gene=gene_name)
+# 
+# cor_list[[gene_name]] <- correlations_tbl
+#   
+# }
+
+cor_tbl <- read_rds("cor_tbl.rds")
+
+cor_tbl <- cor_list %>% purrr::reduce(bind_rows) #%>% %>% mutate(cor_gene=fct_reorder(cor_gene,.x = genes))
+
+cor_tbl <- cor_list %>% purrr::reduce(bind_rows) %>%  mutate(cor_gene=fct_relevel(cor_gene,genes))
+write_rds(cor_tbl,"cor_tbl.rds")
+
+top_cor_genes <- cor_tbl %>% filter(gene %in% tf_genes) %>% group_by(cor_gene) %>% slice_max(cor,n=3) %>% pull(gene) %>% unique()
+
+cor_tbl <- cor_tbl%>%filter(gene%in%top_cor_genes)%>% group_by(cor_gene) %>% arrange(cor,.by_group = TRUE) %>% mutate(gene=fct_inorder(gene))
+
+cor_hp <- cor_tbl %>%filter(gene%in%top_cor_genes) %>%
+  group_by(cor_gene)%>% ungroup() %>% 
+ggplot(aes(gene,cor_gene, fill=cor)) +geom_tile()+ theme(axis.text.x=element_text(angle = 90))+scale_fill_distiller(
+    palette = "RdBu"
+  )
+cor_hp
+
+  ###########
+```
+
+```{r}
+###loadings without cell embedings
+#PC2 laodings
+genes_sel <- c("CD163", "LGMN", "LYZ")
+dims_sel <- c(1:2)
+dat <- BAL_macrophages@assays$RNA@data[ensemblizer(genes_sel),] %>% as.matrix() %>% t() %>%
+  as_tibble(rownames = "cell")
+colnames(dat) <- c("cell",genifiy(colnames(dat)))
+dat <- BAL_macrophages@reductions$pca@cell.embeddings[,dims_sel] %>% as_tibble(rownames = "cell") %>% left_join(dat)
+
+
+PC_2_top_loaded <- dat %>%
+  pivot_longer(cols = CD163:LGMN, values_to = "value")%>%
+  group_by(name) %>% mutate(scaled_value=scale(value)) %>% mutate(value=value*-1)  %>% 
+  ggplot(aes(PC_2,value))+geom_smooth(aes(color=name))+coord_flip()+theme_2 + xlim(c(y_lim_pc_and_loadings))
+
+### PC1 loadings
+
+genes_sel <- c("APOC1",
+               "S100A8")
+dims_sel <- c(1:2)
+dat <- BAL_macrophages@assays$RNA@data[ensemblizer(genes_sel),] %>% as.matrix() %>% t() %>% as_tibble(rownames = "cell")
+meta_data_param <- "HLA_d"
+genes_sel %<>% c(meta_data_param)
+dat_meta <- BAL_macrophages[[meta_data_param]] %>% as_tibble(rownames = "cell")
+colnames(dat) <- c("cell",genifiy(colnames(dat)))
+dat %<>%  left_join(dat_meta)
+dat <- BAL_macrophages@reductions$pca@cell.embeddings[,dims_sel] %>% as_tibble(rownames = "cell") %>% left_join(dat)
+
+
+PC_1_top_loaded <- dat %>%
+  pivot_longer(cols = S100A8:HLA_d, values_to = "value") %>%
+  group_by(name) %>% mutate(scaled_value=scale(value))  %>% 
+  ggplot(aes(PC_1,scaled_value))+geom_smooth(aes(color=name))+theme_2 + xlim(x_lim_pc_and_loadings)
+
+######
+pc1_pc2+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3, 0.5), heights = c(3,0.5),guides = 'collect')
+
+
+```
+
+#
+```{r}
+limits <- c(-0.5,1)
+p_ayaub_fib_score_point <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Ayau_IPFeMp"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Ayau_IPFeMp"))
+
+
+Mors_1_SPP_fib_score_point <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Mors_1SPP1+MIPF"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Mors_1SPP1+MIPF"))
+
+Reyf_MCluster1_fib_score_point <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Reyf_MCluster1"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Reyf_MCluster1"))
+
+col_axis.genes <- function(x){
+  dings_col <- ifelse(x$data$Gene%in% all_intersect,"red",
+                    ifelse(x$data$Gene%in% common_genes, "green","black"))
+  dings_col <- dings_col[1:length(unique(x$data$Gene))]
+  return(list(theme(axis.text.y = element_text(color=dings_col), axis.text.x = element_text(color="black"))))
+}
+
+
+Reyf_MCluster1_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Reyf_MCluster1_lo_corr")
+Reyf_MCluster1_lo_corr_dot_plot <- Reyf_MCluster1_lo_corr_dot_plot+col_axis.genes(Reyf_MCluster1_lo_corr_dot_plot)
+
+Mors_1_SPP_fib_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Mors_1_SPP_fib_lo_corr")
+Mors_1_SPP_fib_lo_corr_dot_plot <- Mors_1_SPP_fib_lo_corr_dot_plot+col_axis.genes(Mors_1_SPP_fib_lo_corr_dot_plot)
+
+Ayau_IPFeMp_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Ayau_IPFeMp_lo_corr")
+Ayau_IPFeMp_lo_corr_dot_plot <- Ayau_IPFeMp_lo_corr_dot_plot+col_axis.genes(Ayau_IPFeMp_lo_corr_dot_plot)
+
+
+
+
+
+layout_fib <-"
+ABC
+ABC
+DEF
+DEF
+DEF
+DEF
+GGF"
+
+
+ fib_dotplot <- p_ayaub_fib_score_point+#A
+   Mors_1_SPP_fib_score_point+#B
+    Reyf_MCluster1_fib_score_point+#C
+  Ayau_IPFeMp_lo_corr_dot_plot+#D 
+      Mors_1_SPP_fib_lo_corr_dot_plot+#E
+Reyf_MCluster1_lo_corr_dot_plot+#F
+  plot_spacer()+#G
+   plot_layout(design = layout_fib,
+               guides = 'collect') +
+  plot_annotation(tag_levels = 'A')
+  # theme(text = element_text(size = size_),
+  #       axis.text.y  =element_text(size = size_),
+  #       axis.text.x  =element_text(size = size_-2),
+  #       title=element_text(size = size_) ,
+  #       legend.key.size = unit(0.1, 'cm')
+  # )
+fib_dotplot
+ggsave("../output/fib_dotplot.tiff", units = "cm", height = 15)
+
+
+```
+```{r}
+clean_hgnc <- . %>% ensemblizer_2() %>% genifiy_2() %>% discard(is.na)
+s1 <- genesets_fibrosis$Reyf_MCluster1 %>% clean_hgnc
+s2 <- genesets_fibrosis$`Mors_1SPP1+MIPF`%>% clean_hgnc
+s3 <- genesets_fibrosis$Ayau_IPFeMp%>% clean_hgnc
+all_intersect <- Reduce(intersect, list(s1,s2,s3 ))
+common_genes <- c(
+intersect(s1,s2),
+intersect(s2,s3),
+intersect(s1,s3)) %>% unique()
+
+```
+

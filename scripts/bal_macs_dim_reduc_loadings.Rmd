@@ -1,0 +1,173 @@
+---
+title: "BAL-Macs dimensional reduction loadings"
+output: html_notebook
+---
+
+```{r packages}
+library(tidyverse)
+library(Seurat)
+library(magrittr)
+library(ggpubr)
+library(gridGraphics)
+
+source("functions_bal_macrophages.R")
+source("initialize_bal_data.R")
+```
+
+
+    
+
+      Let's remind ourselves of which data we are working with.  
+    
+```{r}
+DimPlot(BAL_macrophages,group.by = "Cluster")
+```
+
+```{r}
+BAL_macrophages <- BuildClusterTree(object=BAL_macrophages, assay = "RNA")
+PlotClusterTree(BAL_macrophages) # Additional arguments at ape::plot.phylo
+```
+
+larger distance from CD163 to AM could be weakly supportive of argument that no diffentiation in this direction occurs.
+  
+  Let's look at the overlap of MonoM and CD163 in umap
+  
+
+```{r}
+DimPlot(BAL_macrophages, reduction = "pca", pt.size = 0.5, dims = c(1:2))
+DimPlot(BAL_macrophages, reduction = "pca", pt.size = 0.5, dims = c(3:4))
+DimPlot(BAL_macrophages, reduction = "pca", pt.size = 0.5, dims = c(5:6))
+DimPlot(BAL_macrophages, reduction = "pca", pt.size = 0.5, dims = c(7:8))
+
+DimPlot(BAL_macrophages, reduction = "pca", pt.size = 0.5, dims = c(3:4),cells.highlight = WhichCells(object = BAL_macrophages, idents = "AM2"))
+```
+```{r}
+pc1_pc2_titeled_dens <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_density_2d(bins=200, linejoin = "round")+
+  theme(legend.position = "none")  +theme_2 +  
+  pc3_pc4 <- DimPlot(BAL_macrophages, reduction = "pca", pt.size = 1.1, dims = c(3:4), )
+pc3_pc4_titeled <-  pc3_pc4$data %>% ggplot(aes(PC_3,PC_4,color=ident))+ geom_point(aes(alpha=0.2))+# xlim(x_lim_pc_and_loadings) + ylim(y_lim_pc_and_loadings) + 
+  theme(legend.position = "none")  +theme_2_titeled + ggplot2::scale_color_manual(values = color.cluster)+ggtitle("PC3 vs. PC4")
+
+pc3_pc4_titeled_dens <-  pc3_pc4$data %>% ggplot(aes(PC_3,PC_4,color=ident))+ geom_density_2d(bins=200, linejoin = "round")+
+  theme(legend.position = "none")  +#theme_2 +  
+  ggplot2::scale_color_ma
+pc3_pc4_titeled_dens
+pc1_pc2_titeled_dens
+```
+
+```{r}
+#BAL_macrophages <- ProjectDim(BAL_macrophages)
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% mutate(ensg1=ensemblizer_2(gene)) %>% 
+  arrange(-PC_1) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene, ensg) %>% head(50) %>% print(n=50)
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% arrange(PC_1) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene) %>% head(50) %>% print(n=50)
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% arrange(PC_2) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene) %>% head(50) %>% print(n=50)
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% arrange(-PC_2) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene) %>% head(50) %>% print(n=50)
+
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% arrange(PC_3) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene) %>% head(50) %>% print(n=50)
+
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% arrange(-PC_3) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene) %>% head(50) %>% print(n=50)
+BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% arrange(PC_4) %>% select(PC_1, PC_2,PC_3,PC_4,PC_5, gene) %>% head(50) %>% print(n=50)
+
+```
+```{r}
+PC_1_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_1)  %>% mutate(pc_squared=((PC_1)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_1<0,"negative", "positive"), gene= fct_reorder(gene,PC_1)) %>% arrange(PC_1) %>% ggplot(aes(PC_1, gene,color=PC_1)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_1, y=gene,yend=gene), size=1)+theme_bw() +scale_color_distiller(
+      palette = "RdYlBu", direction = -1)
+
+PC_2_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_2)  %>% mutate(pc_squared=((PC_2)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_2<0,"negative", "positive"), gene= fct_reorder(gene,PC_2)) %>% arrange(PC_2) %>% ggplot(aes(PC_2, gene,color=PC_2)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_2, y=gene,yend=gene), size=1) +theme_bw() +scale_color_distiller(palette = "RdYlBu", direction = -1)
+
+PC_1_lollypop+PC_2_lollypop+plot_layout(guides = "collect", widths = c(1), heights = c(6))
+```
+```{r}
+VlnPlot(BAL_macrophages, features = ensemblizer("HLA-DQA1"), split.by = "patient")
+VlnPlot(BAL_macrophages, features = ensemblizer("HLA-DPB1"), split.by = "patient")
+VlnPlot(BAL_macrophages, features = ensemblizer("HLA-DRB1"), split.by = "patient")
+```
+
+```{r}
+
+FeaturePlot(BAL_macrophages, features = ensemblizer("HLA-DQB1")) + scale_color_viridis_c()
+FeaturePlot(BAL_macrophages, features = "HLA_d") + scale_color_viridis_c()
+
+```
+```{r}
+#VizDimLoadings(BAL_macrophages, dims = 1:2, reduction = "pca")
+BAL_mac_new <- FindClusters(BAL_macrophages, resolution = 1.2)
+
+majority_in_small_clusters <- tibble(seurat_clusters=BAL_mac_new$seurat_clusters,cluster= BAL_mac_new$Cluster) %>% count(seurat_clusters, cluster) %>% group_by(seurat_clusters) %>%  slice(which.max(n)) %>% mutate(small_majority_cluster=paste(seurat_clusters, cluster, sep="_"))
+
+BAL_mac_new$small_majority_cluster<- tibble(seurat_clusters=BAL_mac_new$seurat_clusters) %>% left_join(majority_in_small_clusters, by="seurat_clusters") %>% pull(small_majority_cluster)
+Idents(BAL_mac_new) <- "small_majority_cluster"
+
+library("ggdendro")
+BAL_mac_new <- BuildClusterTree(object=BAL_mac_new, assay = "RNA")
+
+hclust_BAL_small <- my_hclust_BuildCLusterTree(BAL_mac_new, assay = "RNA")
+clust_dendro_small <- ggdendrogram(hclust_BAL_small)
+clust_dendro_small
+DimPlot(BAL_mac_new)
+DimPlot(BAL_mac_new, cells.highlight = WhichCells(object = BAL_mac_new, idents = "1_Monocytes"))
+```
+
+```{r}
+pca_loadings_plot(feature = "APOC1")+theme_minimal()
+pca_loadings_plot(feature ="VEGFB")
+pca_loadings_plot(feature ="CD68")
+pca_loadings_plot_meta_data(feature ="HLA_d")
+
+
+dings <- pca_loadings_plot(feature ="CD163", pc="PC_2") 
+pca_loadings_plot(feature ="CTSL", pc="PC_2")
+pca_loadings_plot(feature ="MERTK", pc="PC_2")
+pca_loadings_plot(feature ="CCL2", pc="PC_2")
+pca_loadings_plot(feature ="HLA-DQA1", pc="PC_1")
+pca_loadings_plot(feature ="HLA-DPB1", pc="PC_1")
+pca_loadings_plot(feature ="HLA-DRB1", pc="PC_1")
+
+pca_loadings_plot_90(feature ="S100A12", pc="PC_2")
+pca_loadings_plot_90(feature ="S100A8", pc="PC_2")
+pca_loadings_plot_90(feature ="LYZ", pc="PC_2")
+pca_loadings_plot_90(feature ="CD52", pc="PC_2")
+pca_loadings_plot_90(feature ="JAML", pc="PC_2")
+pca_loadings_plot_90(feature ="MCEMP1", pc="PC_2")
+
+pca_loadings_plot(feature ="FCN1", pc="PC_1")
+pca_loadings_plot(feature ="VCAN", pc="PC_1")
+pca_loadings_plot(feature ="IFITM2", pc="PC_1")
+
+pca_loadings_plot(feature ="S100A8", pc="PC_1")
+
+
+
+
+
+
+pca_loadings_plot(feature ="CCL2", pc="PC_2")
+
+dings
+pca_loadings_plot(feature ="LGMN", pc="PC_2")
+
+grid.newpage()                                 # Create new plot page
+print(dings,                                     # Draw rotated plot
+      vp = viewport(width = 0.6,
+                    height = 0.6,
+                    angle = 90))
+
+
+DimPlot(BAL_macrophages, cells.highlight = WhichCells(BAL_macrophages, idents = "MonoM"))
+DimPlot(BAL_macrophages, cells.highlight = WhichCells(BAL_macrophages, idents = "CD163LGMNM"))
+
+
+
+```
+```{r}
+library(usethis)
+
+#save.image(file = "bal_macs_dim_reduc.RData")
+```
+  
+```{r}
+dings <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% pull(gene) 
+dings_ensg <- dings %>%ensemblizer()
+  mutate(ensg1=ensemblizer(gene)) 
+```
+

@@ -1,0 +1,100 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+asinTransform <- function(p) { asin(sqrt(p)) }
+asin_inverse <-function(y) {sign(y)*sin(y)^2}
+
+seq(0.1,1,by=0.05) %>% map(asinTransform) %>% as_vector() %>% asin_inverse
+
+
+```
+```{r}
+  melc_macs_all <- all_dat %>% filter(new_celltype %in% c("Macrophages", "Monocytes")) %>%# filter(Patient=="A592")%>% 
+    select(dist_to_coll4_all,dist_to_coll4_large,CD11b:CXCR3)#%>% map_df(asin_inverse)
+melc_macs_all$source_id <- all_dat %>% filter(new_celltype %in% c("Macrophages", "Monocytes")) %>%
+pull(SourceID)
+  cor_tbl_final <- tibble()
+  
+for (id in unique(melc_macs_all$source_id)) {
+  #id <- unique(melc_macs_all$source_id)[2]
+  melc_macs <- filter(melc_macs_all,source_id==id)
+  melc_macs <-  melc_macs %>% select(-source_id)
+  melc_macs <- melc_macs[melc_macs[,"HLADR"]>0.001, ]
+    melc_macs <- melc_macs[melc_macs[,"CD3"]<0.02, ]
+
+  
+  
+  genes=colnames(melc_macs)
+  cor_list <- list()
+  
+  for (gene_name in genes) {
+    
+    melc_macs_gene <- melc_macs#[melc_macs[,gene_name]>0.01, ]
+    melc_macs_gene <- melc_macs_gene[colSums(melc_macs_gene) > 0]
+    if ((nrow(melc_macs_gene)>40)&gene_name %in% colnames(melc_macs_gene)) {
+      
+    matrix_mod <- melc_macs_gene %>% drop_na()  %>% as.matrix() %>% t()
+    gene<-as.numeric(matrix_mod[gene_name,])
+    correlations<-apply(matrix_mod,1,function(x){cor(gene,x)})
+    correlations_tbl <- tibble(gene=names(correlations), cor=correlations, cor_gene=gene_name)
+    cor_list[[gene_name]] <- correlations_tbl
+    cor_tbl <- cor_list %>% purrr::reduce(bind_rows) #%>% %>% mutate(cor_gene=fct_reorder(cor_gene,.x = genes))
+  cor_tbl_final <-  cor_tbl %>% mutate(source_id=id) %>%  bind_rows(cor_tbl_final)
+  }else {print(paste(id, gene_name))}
+
+  }
+  
+}
+  
+  cor_tbl_final %>% group_by(gene,cor_gene) %>% summarise(cor=mean(cor))
+  #cor_tbl <- cor_list %>% purrr::reduce(bind_rows) %>%  mutate(cor_gene=fct_relevel(cor_gene,genes))
+  #write_rds(cor_tbl,"cor_tbl.rds")
+  
+ # top_cor_genes <- cor_tbl %>% filter(gene %in% tf_genes) %>% group_by(cor_gene) %>% slice_max(cor,n=3) %>% pull(gene) %>% unique()
+  
+  
+  #cor_tbl <- cor_tbl%>%filter(gene%in%top_cor_genes)%>% group_by(cor_gene) %>% arrange(cor,.by_group = TRUE) %>% mutate(gene=fct_inorder(gene))
+  #write_rds(cor_tbl,"cor_tbl.rds")
+  cor_hp <- cor_tbl %>%#filter(gene%in%top_cor_genes) %>%
+    filter(cor<0.9) %>% 
+    
+    mutate(gene=factor(gene))%>% 
+    mutate(cor_gene=factor(cor_gene, levels = levels(gene))) %>% 
+    group_by(cor_gene)%>% ungroup() %>% 
+    ggplot(aes(gene,cor_gene, fill=cor)) +geom_tile()+ theme(axis.text.x=element_text(angle = 90))+scale_fill_distiller(
+      palette = "RdBu"
+    )
+  cor_hp
+
+ggsave(cor_hp, "cor_hp_filtered for postive_backtrans_dist.png", width = 40, height = 3)
+
+
+cor_tbl_final %>% ggplot(aes(x=gene,cor, color=gene))+geom_point()+geom_hline(aes(yintercept=0)) +facet_wrap(~cor_gene,nrow=1)+ theme(axis.text.x = element_text(size = 6, angle = 90))
+
+ggsave("correlation_MELC_dotplot_all_cells_filtered for postive_backtrans_dist.png", width = 40, height = 3)
+```
+
+
+```{r}
+melc_macs %>% ggplot(aes(CD11b, CD14)) + geom_point()
+
+melc_macs %>% ggplot(aes(asin_inverse(CD11b), asin_inverse(CD14))) + geom_point()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

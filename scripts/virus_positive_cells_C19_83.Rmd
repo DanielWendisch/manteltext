@@ -1,0 +1,53 @@
+---
+title: "virus positive cells C19_83"
+output: html_notebook
+---
+
+
+```{r}
+
+meta_data <- BAL_macrophages@meta.data %>% as_tibble(rownames = "genes") %>% mutate(sars_cov_2_pos=nCount_SCoV2>0)
+BAL_macrophages$sars_cov_2_pos <- meta_data$sars_cov_2_pos
+viral_counts <- meta_data  %>%count(Cluster,sars_cov_2_pos) %>%group_by(Cluster) %>%  mutate(prop = prop.table(n)) 
+
+meta_data %>% filter(nCount_SCoV2>0) %>%pull(patient) %>%  table()
+viral_counts
+viral_counts %>% filter(sars_cov_2_pos==TRUE) %>% ggplot(aes(x=Cluster, y=prop)) +geom_col()
+viral_counts  %>% ggplot(aes(x=Cluster, y=prop,fill=sars_cov_2_pos)) +geom_col()
+viral_counts  %>% ggplot(aes(x=Cluster, y=n,fill=sars_cov_2_pos)) +geom_col()
+```
+```{r}
+
+Idents(BAL_macrophages) <- "patient"
+C19_83 <- subset(BAL_macrophages, idents =(BAL_macrophages$patient %>% levels())[1])
+Idents(C19_83) <- "Cluster"
+C19_83_CD163LGMNM <- subset(C19_83, idents =("CD163LGMNM"))
+Idents(BAL_macrophages) <- "Cluster"
+C19_83_CD163LGMNM$sars2_pos <- if_else(C19_83_CD163LGMNM@meta.data$nCount_SCoV2>1, "sars_cov_2_pos", "negative"  )
+C19_83_CD163LGMNM$patient <- C19_83_CD163LGMNM@meta.data %>% as_tibble() %>%  mutate(patient=as.character(patient))%>%pull(patient) %>% str_replace("-","_")
+Idents(C19_83_CD163LGMNM) <- "sars2_pos"
+sars_cov_CD163LGMNM_markers <-  C19_83_CD163LGMNM %>% FindAllMarkers() # %>% mutate(gene=genifiy(gene))
+sars_cov_CD163LGMNM_markers$gene <-  sars_cov_CD163LGMNM_markers %>% pull(gene) %>% map(.,  ~genifiy(.x) ) %>% unlist()
+sars_cov_CD163LGMNM_markers %>% filter(cluster=="sars_cov_2_pos", avg_log2FC>0) %>%  arrange(p_val)
+sars_cov_CD163LGMNM_markers %>% filter(cluster!="sars_cov_2_pos", avg_log2FC>0) %>%  arrange(p_val)
+C19_83_CD163LGMNM %>% VlnPlot(ensemblizer( "PIM3")) +ggtitle( "PIM3")
+C19_83_CD163LGMNM %>% VlnPlot(ensemblizer( "S100A4")) +ggtitle( "S100A4")
+C19_83_CD163LGMNM %>% VlnPlot(ensemblizer( 	"PDK4")) +ggtitle( "	PDK4")
+C19_83_CD163LGMNM %>% VlnPlot(ensemblizer( "CSF1R")) +ggtitle( "CSF1R")
+```
+
+
+
+```{r}
+table(C19_83@meta.data$sars_cov_2_pos, C19_83@meta.data$Cluster)
+table(C19_83@meta.data$sars_cov_2_pos, C19_83@meta.data$Cluster) %>% chisq.test()
+
+```
+
+```{r}
+C19_83@meta.data %>% as_tibble() %>%  mutate(patient=as.character(patient)) %>% filter(Cluster!="ProlifAM",Cluster!="AM2" ) %>% select(Cluster, sars2_pos) %>% table()%>% t()
+C19_83@meta.data %>% as_tibble() %>%  mutate(patient=as.character(patient)) %>% filter(Cluster!="ProlifAM",Cluster!="AM2" ) %>% select(Cluster, sars2_pos) %>% table() %>% t()%>% chisq.test()
+C19_83@meta.data %>% as_tibble() %>%  mutate(patient=as.character(patient)) %>% select(Cluster, sars2_pos) %>% table() %>% t()
+C19_83@meta.data %>% as_tibble() %>%  mutate(patient=as.character(patient)) %>% select(Cluster, sars2_pos) %>% table() %>% t() %>% chisq.test()
+```
+

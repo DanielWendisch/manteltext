@@ -1,0 +1,391 @@
+---
+title: "MELC Manteltext"
+output: html_notebook
+---
+
+
+```{r include=FALSE}
+#library(raster)
+library(tidyverse)
+library(readxl)
+library(Seurat)
+library("viridis")
+#library("spatstat")
+#library(spatialEco)
+#library(geosphere)
+#library("sf")
+library(ggpubr)
+library(ggnewscale)
+library("Hmisc")
+#library("rasterVis")#levelplot()
+library("chisq.posthoc.test")
+#library("tidyHeatmap")
+library(gridExtra)
+library(janitor)
+library(wesanderson)
+```
+
+### file paths
+```{r}
+path_melc_seurat <- "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\MELC\\2021-03-30_COVID_MELC.Rds"
+path_source_id_dpso_pa_covid_id <- "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\MELC\\source_id_dpso_pa_covid_id_fov_no.rds"
+path_all_myeloid_combined <- "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\MELC\\2021_05_27_all_myeloid_combined_RIGHT_LOCATION.rds"
+path_fov_to_tif <- "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\MELC\\fov_to_tif.rds"
+path_dist_tbl <- "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\MELC\\dist_tbl_all_myeloid.rds"
+path_file_MELC_Col4 <- "C:/Users/danne/OneDrive - Charité - Universitätsmedizin Berlin/Daniel/CoV/Wendisch_et_al/Experiments/Patho-Histo/MELC_Col4/"
+```
+
+### data joining
+```{r}
+
+ds <- readRDS(path_melc_seurat)
+ds$Cluster[ds$Cluster == "CD163+ Macrophages"] <- "Macrophages" # Oliver.Dietrich@helmholtz-hiri.de email 20.05.2021
+
+data <- data.frame(
+  CD163   = ds@assays$MELC@data["CD163", ],
+  HLADR   = ds@assays$MELC@data["HLADR", ],
+  Cluster = ds@meta.data$Celltype
+)
+
+cutoff_false <- quantile(data$CD163[data$Cluster == "Macrophages"], 0.5) # olis definition of cutoff
+
+data$Cluster[data$Cluster == "CD163+ Macrophages"] <- "Macrophages"
+
+cutoff_corrected <- quantile(data$CD163[data$Cluster == "Macrophages"], 0.5) # olis definition of cutoff
+
+ # quantile(data$CD163[data$Cluster == "T cells"], 0.62)
+non_myeloid_cluster_names <- c("Neutrophils","T cells", "NK cells","B cells")
+CD163_non_myeloid <- data %>% filter(Cluster %in% non_myeloid_cluster_names) %>% pull(CD163)
+CD163_myeloid <- data %>% filter(!Cluster %in% non_myeloid_cluster_names) %>% pull(CD163)
+
+non_myolid_quantile_at_cutoff <-mean(CD163_non_myeloid<cutoff_corrected)
+non_myolid_quantile_at_false_cutoff <- mean(CD163_non_myeloid<cutoff_false)
+
+macrophage_quantile_at_false_cutoff <- mean(CD163_myeloid<cutoff_false)
+
+cutoff <- cutoff_corrected
+```
+
+the cutoff for grouping Macs into CD163+/- that was chosen in the paper (arbirartly the median of CD163 in the data slot) was `r cutoff_corrected`
+In the analysis I used the median of a previously grouped Macrophages set, which was
+`r cutoff_false`.
+Since this macrophages set didn't include all the latter CD163+ macrophages the percentage of CD163+ Macs in this analysis wasn't 50% of all Macs  but only `r macrophage_quantile_at_false_cutoff`
+
+The correct median of CD163 in all macs is at the `r non_myolid_quantile_at_cutoff` percentile the incorrect value at the `r non_myolid_quantile_at_false_cutoff` of all non-myeloid clusters. 
+
+
+
+
+```{r echo=FALSE}
+dat_new <- readRDS(path_melc_seurat)
+melc_DATA <- dat_new@assays$MELC@data %>% as.matrix() %>% t() %>% as_tibble(rownames = "cell_name")
+melc_DATA <- melc_DATA %>% select(cell_name,CD11b:CXCR3)
+#########
+melc_counts <- dat_new@assays$MELC@counts %>% as.matrix() %>% t() %>% as_tibble(rownames = "cell_name")
+melc_counts <- melc_counts %>% select(cell_name,CD11b:CXCR3)
+
+###############
+source_id_dpso_pa_covid_id <- readRDS(path_source_id_dpso_pa_covid_id)
+all_dat_conv <- readRDS(path_all_myeloid_combined)
+############
+all_dat_conv <- all_dat_conv %>% select(cell_name:Cluster) %>% left_join(melc_DATA, by="cell_name")
+############ 
+
+fov_to_tif <- read_rds(path_fov_to_tif)
+dist_tbl <- read_rds(path_dist_tbl)
+all_dat <- right_join(dist_tbl,all_dat_conv)
+all_dat <- all_dat %>% mutate(new_celltype=ifelse(Celltype=="CD163_Macrophages","Macrophages", Celltype)) %>% 
+  mutate(CD163_oli=ifelse(CD163>cutoff,"CD163_pos","CD163_neg")) %>% 
+  mutate(CD163_oli=ifelse(Celltype=="Neutrophils","Neutrophil",CD163_oli)) %>% # I think this wasbecause of a previous false annotation 
+  mutate(CD163_false=ifelse(CD163>cutoff_false,"CD163_pos","CD163_neg")) %>% #CD163 segregation with false cutoff
+  mutate(CD163_false=ifelse(Celltype=="Neutrophils","Neutrophil",CD163_false))
+```
+
+### creating different groupings of 'in', 'adjacent' and 'out'
+```{r echo=FALSE}
+all_cells <- all_dat %>% mutate()
+all_dat <- all_dat %>% filter(new_celltype=="Macrophages"|new_celltype=="Neutrophils")
+all_dat <- all_dat %>% 
+  mutate(dist_to_coll4_grouped_large=ifelse(dist_to_coll4_large<=6,"in", ifelse(dist_to_coll4_large>20,"out",
+      "adjacent"))) %>% 
+  mutate(dist_to_coll4_grouped_all=ifelse(dist_to_coll4_all<=6,"in", ifelse(dist_to_coll4_all>20,"out",
+      "adjacent"))) %>% 
+   mutate(dist_to_coll4_grouped_all_7=ifelse(dist_to_coll4_all<=7,"in", ifelse(dist_to_coll4_all>20,"out",
+      "adjacent"))) %>% 
+  mutate(dist_to_coll4_grouped_weak=ifelse(dist_to_coll4_large<=6 & dist_to_coll4_all<6,"in", ifelse(dist_to_coll4_all>20,"out",
+      ifelse(dist_to_coll4_large>6 & dist_to_coll4_all<6,"weak", "adjacent"))))
+
+```
+
+### paper cutoff, location of Macs relative to collagen 4
+```{r}
+
+all_dat <- all_dat %>% filter(new_celltype=="Macrophages")
+#make pipline function: https://github.com/andrew-couch/Tidy-Tuesday/blob/master/Season%201/Scripts/TidyTuesdayFunctions.Rmd line 57
+prop_maker <-  function(df, CD163_group) 
+  {CD163_group <- enquo(CD163_group)
+  df %>% filter(!!CD163_group %in% c("CD163_pos", "CD163_neg")) %>%
+    mutate(celltype_grouped=as_factor(!!CD163_group), 
+         dist_to_coll4_grouped=as_factor(dist_to_coll4_grouped_all_7),
+         SourceID=as_factor(SourceID)) %>% 
+   #count n of combinations Marker+/- and col_in/col_out
+  #group_by(marker__grouped, dist_to_coll4_grouped,SourceID) %>% summarise(n=n()) %>% 
+   count(celltype_grouped, dist_to_coll4_grouped,SourceID, .drop = F) %>% 
+  mutate(all_combos=paste0(celltype_grouped,"_",dist_to_coll4_grouped)) %>% 
+  mutate(id=paste0(SourceID,celltype_grouped, dist_to_coll4_grouped)) %>% 
+  group_by(SourceID) %>%
+  mutate(all_combos_rel=n/sum(n))%>% ungroup() %>% 
+  group_by(SourceID, dist_to_coll4_grouped) %>% mutate(prop_col_status=n/sum(n)) %>% 
+  mutate(prop_col_status=ifelse(!is.na(prop_col_status), prop_col_status,0)) %>% 
+  mutate(sum=sum(n)) %>% ungroup() %>%
+  group_by(SourceID, celltype_grouped) %>% mutate(prop_celltype=n/sum(n)) %>% 
+  mutate(pos_neg_rel=ifelse(!is.na(celltype_grouped), celltype_grouped,0)) %>% 
+  ungroup() %>% left_join(source_id_dpso_pa_covid_id)%>% 
+  mutate(all_combos=factor(all_combos, levels= c("CD163_pos_in","CD163_pos_adjacent","CD163_pos_out",                                       "CD163_neg_in",  "CD163_neg_adjacent", "CD163_neg_out")))}
+      
+dat <- all_dat %>% prop_maker(CD163_group=CD163_oli)
+ 
+symnum_args_6 <- list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1)/6, symbols = c("****", "***", "**", "*", "ns"))
+symnum_args <- list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns"))
+
+
+perc_plot <-   function(df){df %>%  filter(!is.na(dpso)) %>% #filter(weird=="norm") %>% 
+  ggboxplot(x="all_combos", y="all_combos_rel",  color= "dpso",add = "jitter", fill="dist_to_coll4_grouped", title =  "CD163+/- Mac location to Coll.4, % of all Macs/FOV" ) + stat_compare_means(aes(label = ..p.signif..),symnum.args = symnum_args_6,paired = T,comparisons = list(c("CD163_pos_in", "CD163_pos_adjacent") ,c("CD163_pos_in", "CD163_pos_out"), c("CD163_pos_in", "CD163_neg_in"),c("CD163_pos_out", "CD163_neg_out"), c("CD163_neg_out", "CD163_neg_in"), c("CD163_neg_adjacent", "CD163_neg_in")))+ rotate_x_text(45)+scale_fill_manual(values=rev(wes_palette("Cavalcanti1")[c(5,4,1)]))}
+
+p1 <- perc_plot(dat)
+#ggsave(paste0("fig4s_v2021_06_17/","mac_proportion_of_celltype_umap_cuttoff_all7.eps"), height = 7)
+#ggsave(paste0("fig4s_v2021_06_17/","mac_proportion_of_celltype_umap_cuttoff_all7.png"), height = 7)
+
+n_plot <-   function(df){df %>%
+   filter(!is.na(dpso)) %>% #filter(weird=="norm") %>% 
+  ggboxplot(x="all_combos", y="n",  color= "dpso",add = "jitter",  fill="dist_to_coll4_grouped", title =  "CD163+/- Mac location to Coll.4, n/FOV" ) + stat_compare_means(aes(label = ..p.signif..),symnum.args = symnum_args_6, paired = T,comparisons = list(c("CD163_pos_in", "CD163_pos_adjacent") ,c("CD163_pos_in", "CD163_pos_out"), c("CD163_pos_in", "CD163_neg_in"),c("CD163_pos_out", "CD163_neg_out"), c("CD163_neg_out", "CD163_neg_in"), c("CD163_neg_adjacent", "CD163_neg_in")))+ rotate_x_text(45)+scale_fill_manual(values=rev(wes_palette("Cavalcanti1")[c(5,4,1)]))}
+
+p2 <- n_plot(dat)
+
+#ggsave(paste0("fig4s_v2021_06_17/","n_celltype_umap_cuttoff_all7.eps"), height = 7)
+#ggsave(paste0("fig4s_v2021_06_17/","n__umap_cuttoff_all7.png"), height = 7)
+
+
+group_perc_plot <-function(df){df %>%
+   filter(!is.na(dpso)) %>% #filter(weird=="norm") %>% 
+  ggboxplot(x="all_combos", y="prop_celltype",  color= "dpso",add = "jitter",  fill="dist_to_coll4_grouped", title =  "CD163+/- Mac location to Coll.4, (% of either CD163+/-) /FOV" ) + stat_compare_means(aes(label = ..p.signif..),symnum.args = symnum_args_6, paired = T,comparisons = list(c("CD163_pos_in", "CD163_pos_adjacent") ,c("CD163_pos_in", "CD163_pos_out"), c("CD163_pos_in", "CD163_neg_in"),c("CD163_pos_out", "CD163_neg_out"), c("CD163_neg_out", "CD163_neg_in"), c("CD163_neg_adjacent", "CD163_neg_in")))+ rotate_x_text(45)+scale_fill_manual(values=rev(wes_palette("Cavalcanti1")[c(5,4,1)]))}
+
+p3 <- group_perc_plot(dat)
+p1
+p2
+p3
+```
+### false cutoff: location of Macs relative to collagen 4
+
+```{r}
+perc_plot(dat_false)
+n_plot(dat_false)
+group_perc_plot(dat_false)
+```
+
+### localisation of Macs vs Col4
+```{r localisation of Macs vs Col4}
+library(raster)
+library(sf)
+#path1 <- ("C:/Users/danne/OneDrive - Charité - Universitätsmedizin Berlin/Daniel/CoV/Wendisch_et_al/Experiments/Patho-Histo/MELC_Col4/")
+path1 <- path_file_MELC_Col4
+fov_to_tif_selected <- fov_to_tif[c(2,14,17)]
+
+
+for (i in seq_along(rev(fov_to_tif_selected))) {
+  fov_tif <- fov_to_tif_selected[i]
+
+  
+colla_4 <- raster(paste0(path1,fov_tif ))
+colla_4 <- as(colla_4, "SpatialPixelsDataFrame")
+colla_4 <- as.data.frame(colla_4)
+colnames(colla_4) <- c("intens", "x", "y")
+colla_4 <- colla_4 %>% 
+  mutate(intens_io=ifelse(intens>3,1,0))
+
+
+
+#all_dat %>% filter(SourceID==names(fov_to_tif_selected)[i])  %>% 
+ # ggplot() +
+  #facet_wrap(vars(SourceID))+
+  #geom_raster(data = colla_4, aes_string(x="x", y="y", alpha="intens" )) +
+   #geom_point(aes(x_coord,y_coord, color=CD163_oli), size=4)+
+  #coord_fixed() +xlim(x_lim)+
+  #ylim(y_lim)
+
+#ggsave(paste0("fig4s_test_7/", fov_tif, as.character(quadr),
+ #             "crop_CD163" ,".png"))
+
+remove_format <- theme(legend.position = "none",
+                          axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()
+        )
+
+  
+CD163 <- all_dat %>% filter(SourceID==names(fov_to_tif_selected)[i])  %>% 
+  ggplot() +
+  geom_raster(data = colla_4, aes_string(x="x", y="y", alpha="intens" )) +
+   geom_point(aes(x_coord,y_coord, color=CD163_oli), size=3)+
+  coord_fixed() +scale_color_manual(values=wes_palette("Cavalcanti1")[c(3,2)])
+
+
+all <- all_dat %>% filter(SourceID==names(fov_to_tif_selected)[i])  %>% 
+  ggplot() +
+  #facet_wrap(vars(SourceID))+
+  geom_raster(data = colla_4, aes_string(x="x", y="y", alpha="intens_io" )) +
+   geom_point(aes(x_coord,y_coord, color=dist_to_coll4_grouped_all_7), size=3)+
+ coord_fixed() + remove_format +scale_color_manual(values=rev(wes_palette("Cavalcanti1")[c(4,5,1)])) #4,1,5  #out,in,adj
+
+p1 <- CD163+all+ggtitle("fov_tif")
+
+# ggsave(filename  =  paste0(#"fig4s_v2021_06_17/", 
+#   fov_tif, "CD163_in-out-adj-","7","size3",
+#               "6_20" ,".tiff"), plot =  p1, width = 20)
+####################
+#for fast visibility for loop is broken
+
+print(p1) %>% return()
+
+break()
+}
+
+
+```
+### umap
+```{r}
+ds@reductions$counts_umap <- NULL
+ds@reductions$scaled_umap <- NULL
+ds@reductions$minmax_umap <- NULL
+ds@reductions$norm_umap <- NULL
+FeaturePlot(reduction = "umap", ds, features = c("CD163","C1Q"), blend = T,blend.threshold = 0.05, pt.size = 1, cols=c("lightgrey", "green", "red"))[[3]]
+FeaturePlot(reduction = "umap", ds, features = c("CD163","C1Q"), blend = T,blend.threshold = 0.05, pt.size = 1, cols=c("lightgrey", "green", "red"))[[4]]
+FeaturePlot(reduction = "umap", ds, features = c("HLADR","C1Q"), blend = T,blend.threshold = 0.05, pt.size = 1, cols=c("lightgrey", "green", "red"))[[3]]
+RidgePlot(ds, features = c("C1Q","CD163"), group.by = "Patient", slot = "counts")
+
+FeaturePlot(reduction = "umap", ds, features = "CD163", max.cutoff = "q85")
+FeaturePlot(reduction = "umap", ds, features = "C1Q", max.cutoff = "q90")
+FeaturePlot(reduction = "umap", ds, features = "HLADR", max.cutoff = "q90")
+FeaturePlot(reduction = "umap", ds, features = "CD3", max.cutoff = "q98") 
+
+FeaturePlot(reduction = "umap", ds, features = "CD3", max.cutoff = "q98", min.cutoff = "q60") + ggtitle("Cd3 with massively high lower quantile")
+
+FeaturePlot(reduction = "umap", ds, features = "HLADR", max.cutoff = "q98", min.cutoff = "q40") + ggtitle("HLADR with massively high lower quantile")
+
+FeaturePlot(reduction = "umap", ds, features = "CD163", max.cutoff = "q98", min.cutoff = "q40") + ggtitle("HLADR with massively high lower quantile")
+
+FeaturePlot(reduction = "umap", ds, features = "CD163", max.cutoff = "q95", min.cutoff = "q40") + ggtitle("CD163 with massively high lower quantile")
+
+FeaturePlot(reduction = "umap", ds, features = "C1Q", max.cutoff = "q95", min.cutoff = "q40") + ggtitle("C1Q with massively high lower quantile")
+
+FeaturePlot(reduction = "umap", ds, features = "CD4", max.cutoff = "q80", min.cutoff = "q5") 
+```
+### are C1Q and CD163 rather likely to be exclusive? 
+#### define CD163 and C1Q +/-
+### data
+```{r}
+VlnPlot(ds, features = "CD163", group.by = "Celltype" , pt.size=0, slot = "data")+geom_hline(aes(yintercept=cutoff))
+
+feats <- ds@assays$MELC@data %>% rownames()
+for (feat in feats) {
+  p_feat <- VlnPlot(ds, features = feat, group.by = "Celltype", pt.size=0 )
+  print(p_feat)
+  
+}
+
+```
+###counts
+```{r}
+for (feat in feats) {
+  p_feat <- VlnPlot(ds, features = feat, group.by = "Celltype", pt.size=0 , slot = "counts")
+  print(p_feat)
+  
+}
+```
+
+
+```{r}
+Idents(ds) <- "Celltype"
+ds_macs <- subset(ds, idents= c("Macrophages","CD163+ Macrophages"))
+RidgePlot(ds_macs, features = c("CD163", "C1Q"), group.by = "Patient")
+px <- FeatureScatter(ds_macs, feature1 = "CD163", feature2 = "C1Q", group.by = "Patient")  
+FeatureScatter(ds_macs, feature1 = "CD163", feature2 = "HLADR", group.by = "Patient") 
+FeatureScatter(ds_macs, feature1 = "C1Q", feature2 = "HLADR", group.by = "Patient") 
+px
+
+
+px_data<- px$data
+
+px_data %>% mutate(CD163_arc=logit)
+```
+
+
+```{r}
+##https://slowkow.com/notes/ggplot2-color-by-density/
+library(MASS)
+library(ggplot2)
+library(viridis)
+#> Loading required package: viridisLite
+theme_set(theme_bw(base_size = 16))
+
+# Get density of points in 2 dimensions.
+# @param x A numeric vector.
+# @param y A numeric vector.
+# @param n Create a square n by n grid to compute density.
+# @return The density within each square.
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+
+px_data$density <- get_density(px_data$CD163,px_data$C1Q, n=100)
+px_data %>% ggplot(aes())+geom_point( aes(x=CD163, y=C1Q, color=density), size=0.7)+ scale_color_viridis()
+
+px_data_pos <- px_data %>% filter(C1Q>0.05  | CD163>0.05)
+px_data_pos$density <- get_density(px_data_pos$CD163,px_data_pos$C1Q, n=100)
+px_data_pos %>% ggplot(aes())+geom_point( aes(x=CD163, y=C1Q, color=density), size=0.7)+ scale_color_viridis()
+
+```
+
+```{r}
+tibble(
+SourceID=ds@meta.data$SourceID,
+Celltype=ds@meta.data$Celltype,
+) %>% group_by(SourceID, Celltype) %>% count() %>% ungroup()%>% group_by(SourceID) %>%  mutate(freq=n/sum(n)) %>% ggplot(aes(x=Celltype, y=freq))+geom_boxplot()
+
+
+tibble(
+SourceID=ds@meta.data$SourceID,
+Celltype=ds@meta.data$Celltype %>% as.character(),
+) %>% mutate(Celltype_comb=ifelse(Celltype=="CD163+ Macrophages","Macrophages",Celltype)) %>%  group_by(SourceID, Celltype_comb) %>% count() %>% ungroup()%>% group_by(SourceID) %>%  mutate(freq=n/sum(n))%>% ggplot(aes(x=Celltype_comb, y=freq))+geom_boxplot()
+
+mac_tbl <- tibble(
+SourceID=ds@meta.data$SourceID,
+Celltype=ds@meta.data$Celltype,
+) %>% filter(Celltype %in% c("CD163+ Macrophages","Macrophages")) %>%  group_by(SourceID, Celltype) %>% count() %>% ungroup()%>% group_by(SourceID) %>%  mutate(freq=n/sum(n)) 
+
+mac_tbl %>% ggplot(aes(x=Celltype, y=freq))+geom_boxplot()
+
+mac_tbl %>% filter(Celltype=="CD163+ Macrophages") %>% pull(freq) %>% median()
+mac_tbl %>% filter(Celltype=="CD163+ Macrophages") %>% pull(freq) %>% sd()
+```
+
+
+
+
+
+
+
+
+
+
+
+

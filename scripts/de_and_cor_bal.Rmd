@@ -1,0 +1,260 @@
+---
+title: "de_bal"
+output: word_document
+date: "2022-10-22"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("scran")
+```
+
+```{r}
+BAL_macrophages_small_1 <- subset(BAL_macrophages, downsample=150)
+
+g <- FindMarkers(BAL_macrophages_small_1, ident.1 = "AM1", test.use = "t") %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy_2(ensg))
+
+g %>%filter(avg_log2FC>0.5) %>%  arrange(p_val_adj)
+g %>%filter(p_val_adj<0.05) %>%  arrange(-avg_log2FC)
+
+
+dings_f <- function(x){
+  x %>% ensemblizer_2() %>% VlnPlot(object = BAL_macrophages, features = .)+ggtitle(x)
+}
+
+"ABCC3" %>% dings_f()
+
+c("CYP27A1","GCHFR","MARCO","GLRX","TREM2","CD9","FBP1", "TFRC", "TXN", "CCL18") %>% map(dings_f)
+
+
+
+```
+```{r}
+h <- FindMarkers(BAL_macrophages, ident.1 = "AM1", ident.2 = "AM2" ,test.use = "t") %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy_2(ensg))
+h %>% filter(avg_log2FC >1) %>% arrange(p_val_adj)
+
+```
+
+```{r}
+c("PLA2G7","BLVRB","HMOX1", "CHIT1", "TIMP1", "SPP1", "HMOX1", "S100A8" ) %>% map(dings_f)
+
+
+ensemblizer_2(c("BLVRB")) %>% VlnPlot(BAL_macrophages, features = . ,split.by = "patient")
+
+ensemblizer_2(c("FABP4")) %>% VlnPlot(BAL_macrophages, features = . ,split.by = "patient")
+
+```
+```{r}
+ensemblizer_2(c("CD163")) %>% VlnPlot(BAL_macrophages, features = . ,split.by = "patient")
+
+
+```
+
+
+```{r}
+
+tibble(cluster=BAL_macrophages$Cluster, donor= BAL_macrophages$patient) %>% dplyr::count(cluster, donor)
+```
+
+
+```{r cars}
+BAL_macrophages$mono_am <- fct_collapse(BAL_macrophages$Cluster, group_mono = c("CD163LGMNM", "Monocytes",  "MonoM"), group_am=c("AM1","ProlifAM","AM2"))
+markers_grouped_mon_am <- scran::findMarkers(
+  x         = BAL_macrophages@assays$RNA@data,
+  groups    = BAL_macrophages@meta.data$mono_am,
+  pval.type = "some",
+  test.type = "wilcox",
+  direction = "up",
+  block     = BAL_macrophages@meta.data$patient
+)
+
+
+markers_mono_am_tbl <- as.list(markers_grouped_mon_am) %>% 
+  map(function(x)   as_tibble(x, rownames = "ensg")) %>% 
+  purrr::reduce(bind_rows) %>% 
+  pivot_longer(cols = AUC.group_mono:AUC.group_am, values_to = "AUC_", names_to = "clus") %>% 
+  filter(!is.na(AUC_)) %>% 
+  mutate(gene=genifiy_2(ensg)) %>% 
+  relocate(gene) 
+
+
+markers_grouped_mon_am <- markers_grouped_mon_am %>% as.list()
+
+markers_grouped_mon_am[["group_mono"]] %>% as_tibble(rownames = "ensg") %>%
+  mutate(gene=genifiy_2(ensg)) %>% arrange(FDR)
+
+markers_grouped_mon_am[["group_mono"]] %>% as_tibble(rownames = "ensg") %>%
+  mutate(gene=genifiy_2(ensg)) %>% arrange(-summary.AUC)
+
+markers_grouped_mon_am[["group_am"]] %>% as_tibble(rownames = "ensg") %>%
+  mutate(gene=genifiy_2(ensg)) %>% arrange(FDR)
+```
+```{r}
+
+manuallly_sel_2groups <- c("ITGAM", "CD14", "CCR1", "CSF1R","FABP4","INHBA","FFAR4",  "PPARG", "PCOLCE2")
+```
+```{r }
+dings <- map(markers_grouped_mon_am, function(x) 
+  as_tibble(x, rownames = "ensg")) %>% 
+  purrr::reduce(bind_rows) %>% 
+  pivot_longer(cols = AUC.group_mono:AUC.group_am, values_to = "AUC_", names_to = "clus") %>% 
+  filter(!is.na(AUC_)) %>% 
+  mutate(gene=genifiy_2(ensg)) %>% 
+  relocate(gene) 
+
+
+
+```
+
+
+```{r eval=FALSE, include=FALSE}
+markers_cluster_tbl <- tibble()
+for (clus in unique(BAL_macrophages@meta.data$Cluster)) {
+  print(clus)
+  groups_ <- fct_other(BAL_macrophages@meta.data$Cluster,keep = clus)
+  
+  dings<- scran::findMarkers(
+  x         = BAL_macrophages@assays$RNA@data,
+  groups    = groups_,
+  pval.type = "some",
+  test.type = "wilcox",
+  direction = "up",
+  block     = BAL_macrophages@meta.data$patient
+)
+  dings <- dings[[1]] %>% as_tibble(rownames = "ensg") %>% mutate(clus=clus)
+
+  markers_cluster_tbl <- markers_cluster_tbl %>% bind_rows(dings)
+}
+
+
+for (clus in unique(BAL_macrophages@meta.data$Cluster)) {
+
+  markers_cluster_s4[[clus]]$clus <- dings[[1]]
+}
+  
+
+markers_cluster_tbl %<>% mutate(gene=genifiy_2(ensg))
+
+
+
+
+```
+
+```{r}
+  groups_ <- fct_other(BAL_macrophages@meta.data$Cluster,keep = "AM1")
+  
+  dings<- scran::findMarkers(
+  x         = BAL_macrophages@assays$RNA@data,
+  groups    = groups_,
+  pval.type = "some",
+  test.type = "wilcox",
+  direction = "up"
+)
+  dings <- dings[[1]] %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy_2(ensg))
+
+  
+  wtf <- dings[[1]] %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy_2(ensg)) %>% slice_max(summary.AUC, n=40) %>% pull(gene)
+  
+dings %>% arrange(-summary.AUC)
+```
+
+
+
+```{r}
+test_genes <- c("LGMN", "dings", "123","SPP1" ,"LGMN")
+markers_cluster_tbl <-  read_rds("markers_cluster_tbl.rds")
+top_markers_cluster <- markers_cluster_tbl %>% mutate(clus=factor(clus, levels = cluster_names))%>%group_by(clus) %>% slice_max(summary.AUC,n= 5)%>% arrange(.by_group = ) %>%  pull(gene) %>% unique()
+
+top_markers_cluster_fdr <- markers_cluster %>%group_by(clus) %>% slice_max(-FDR,n= 20)%>% pull(gene) %>% unique()
+
+x <- dings%>% group_by(clus) %>% slice_max(AUC_,n= 10) %>% pull(gene)
+
+dot_plot_cluster(manuallly_sel_2groups)
+
+dot_plot_cluster(unique(c(manuallly_sel_2groups, top_markers_cluster)))#+ coord_flip()
+ggsave("de_cluster_and_groups.png", height = 20)
+
+
+dot_plot_cluster(top_markers_cluster)
+ggsave("de_cluster.png", height = 20)
+
+dot_plot_cluster(top_markers_cluster_fdr)
+ggsave("de_cluster_fdr.png", height = 20)
+
+dot_plot_cluster(top_markers_cluster)
+ggsave("de_clsuter.png", height = 20)
+
+
+dot_plot_cluster(wtf)
+```
+```{r}
+library(readxl)
+library(janitor)
+tf <- read_excel("DatabaseExtract_v_1.01.xlsx")
+tf_genes <- tf %>% clean_names() %>%  filter(is_tf=="Yes") %>% pull(hgnc_symbol) %>% unique()
+#matrix_mod<-BAL_macrophages_small_1@assays$RNA@data %>% as.matrix()
+genes <- c("CD14","S100A8",  "APOC1", "HLA-DRB1", "HLA-DQA1", "C1QA", "LGMN", "CD163")
+rele_genes <- c(tf_genes,genes) %>% ensemblizer_2()
+rele_genes <- rele_genes[!is.na(rele_genes)]
+matrix_mod<-BAL_macrophages@assays$RNA@data[ rownames(BAL_macrophages@assays$RNA@data) %in% rele_genes ,]  %>% as.matrix()
+#matrix_mod <- matrix_mod[rowSums(matrix_mod)>5,]
+rownames(matrix_mod) <- rownames(matrix_mod) %>% genifiy_2()
+cor_list <- list()
+
+for (gene_name in genes) {
+  #gene_name <- "CSF1R"
+  gene<-as.numeric(matrix_mod[gene_name,])
+correlations<-apply(matrix_mod,1,function(x){cor(gene,x)})
+correlations_tbl <- tibble(gene=names(correlations), cor=correlations, cor_gene=gene_name)
+
+cor_list[[gene_name]] <- correlations_tbl
+  
+}
+
+cor_tbl <- cor_list %>% purrr::reduce(bind_rows) #%>% %>% mutate(cor_gene=fct_reorder(cor_gene,.x = genes))
+
+cor_tbl <- cor_list %>% purrr::reduce(bind_rows) %>%  mutate(cor_gene=fct_relevel(cor_gene,genes))
+write_rds(cor_tbl,"cor_tbl.rds")
+
+top_cor_genes <- cor_tbl %>% filter(gene %in% tf_genes) %>% group_by(cor_gene) %>% slice_max(cor,n=3) %>% pull(gene) %>% unique()
+
+cor_tbl <- cor_tbl%>%filter(gene%in%top_cor_genes)%>% group_by(cor_gene) %>% arrange(cor,.by_group = TRUE) %>% mutate(gene=fct_inorder(gene))
+write_rds(cor_tbl,"cor_tbl.rds")
+
+
+
+cor_hp <- cor_tbl %>%filter(gene%in%top_cor_genes) %>%
+  group_by(cor_gene)%>% ungroup() %>% 
+ggplot(aes(gene,cor_gene, fill=cor)) +geom_tile()+ theme(axis.text.x=element_text(angle = 90))+scale_fill_distiller(
+    palette = "RdBu"
+  )
+cor_hp
+
+###########
+
+
+
+
+
+
+
+
+
+
+
+correlations_tbl <- tibble(genes=names(correlations), cor=correlations)
+correlations_tbl  %>% arrange(-cor) 
+correlations_tbl %>% arrange(cor) 
+
+correlations_tbl %>% filter(genes %in% tf_genes)%>% arrange() 
+
+cor_arrang <- . %>% filter(genes %in% tf_genes) %>% mutate(cor=round(cor,digits = 2))%>% arrange(-cor)
+
+cor_list$LGMN %>% cor_arrang
+
+```
+
+
+
+

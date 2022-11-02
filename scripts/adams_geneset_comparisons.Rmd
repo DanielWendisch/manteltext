@@ -1,0 +1,145 @@
+---
+title: "adams geneset comparisons"
+output: html_notebook
+---
+```{r}
+library(janitor)
+library(magrittr)
+```
+
+```{r functions}
+source(file="functions_bal_macrophages.R")
+```
+
+# loading seurat object
+```{r}
+BAL_macrophages <- load_clean_bal_seurat()
+gene_ensb <- BAL_macrophages@misc$features$SYMBOL
+names(gene_ensb) <- BAL_macrophages@misc$features$ENSEMBL
+features <- BAL_macrophages@misc$features
+cluster_names <- c("Monocytes" , "MonoM" , "CD163LGMNM" ,    "AM1"  ,  "AM2"  ,   "ProlifAM")
+
+```
+
+```{r}
+color.cluster <- c(
+  "Monocytes"     = "#009E73",
+  "MonoM"       = "#E69F00",
+  "CD163LGMNM" = "#D55E00",
+  "AM1"         = "#A020F0",
+  "AM2"         = "#0072B2",
+  "ProlifAM"   = "#56B4E9"
+)
+BAL_macrophages@misc$colors$Cluster <- color.cluster
+```
+
+```{r}
+ipf_vs_ctr_adams <- read_tsv("https://www.science.org/doi/suppl/10.1126/sciadv.aba1983/suppl_file/aba1983_data_s8.txt")
+cn <- colnames(ipf_vs_ctr_adams %>% clean_names())[1:7] %>% c("row_number",.)
+colnames(ipf_vs_ctr_adams) <- cn
+ipf_vs_copd_adams <- read_tsv("https://www.science.org/doi/suppl/10.1126/sciadv.aba1983/suppl_file/aba1983_data_s10.txt")
+cn <- colnames(ipf_vs_copd_adams %>% clean_names())[1:7] %>% c("row_number",.)
+colnames(ipf_vs_copd_adams) <- cn
+
+copd_vs_ctr_adams <- read_tsv("https://www.science.org/doi/suppl/10.1126/sciadv.aba1983/suppl_file/aba1983_data_s9.txt")
+cn <- colnames(copd_vs_ctr_adams %>% clean_names())[1:7] %>% c("row_number",.)
+colnames(copd_vs_ctr_adams) <- cn
+```
+
+```{r}
+ipf_vs_ctr_adams$cell_type %>% unique()
+ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage", log1p_fc>0, wilcox_p<0.01) %>% arrange(wilcox_p) %>% head(50)
+ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage", log1p_fc<0, wilcox_p<0.01) %>% arrange(wilcox_p) %>% head(50)
+ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50)
+
+
+```
+
+```{r}
+ipf_vs_copd_adams %>% filter(cell_type=="Macrophage", log1p_fc>0) %>% arrange(wilcox_p)
+ipf_vs_copd_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc>0) %>% arrange(wilcox_p)
+```
+
+```{r}
+####
+adams_dif_set <- ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) %>% 
+  list(mac_alv_ipf_vs_ctr=.)
+
+adams_dif_set[["mac_ipf_vs_ctr"]] <- ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+adams_dif_set[["mac_alv_ipf_vs_copd"]] <- ipf_vs_copd_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+adams_dif_set[["mac_ipf_vs_copd"]] <- ipf_vs_copd_adams %>% filter(cell_type=="Macrophage", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+####
+adams_dif_set[["mac_alv_ctr_vs_ipf"]] <- ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc<0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+adams_dif_set[["mac_alv_copd_vs_ipf"]] <- ipf_vs_copd_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc<0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene)
+
+adams_dif_set[["mac_ctr_vs_ipf"]] <- ipf_vs_ctr_adams %>% filter(cell_type=="Macrophage", log1p_fc<0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+adams_dif_set[["mac_copd_vs_ipf"]] <- ipf_vs_copd_adams %>% filter(cell_type=="Macrophage", log1p_fc<0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene)
+
+####
+adams_dif_set[["mac_copd_vs_ctr"]] <- copd_vs_ctr_adams %>% filter(cell_type=="Macrophage", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+adams_dif_set[["mac_ctr_vs_copd"]] <- copd_vs_ctr_adams %>% filter(cell_type=="Macrophage", log1p_fc<0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene)
+
+
+adams_dif_set[["mac_copd_vs_ctr"]] <- copd_vs_ctr_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc>0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene) 
+
+adams_dif_set[["mac_ctr_vs_copd"]] <- copd_vs_ctr_adams %>% filter(cell_type=="Macrophage Alveolar", log1p_fc<0) %>% arrange(wilcox_p) %>% head(50) %>% pull(gene)
+####
+
+
+scores_adams <- dings@meta.data[, which(
+  stringr::str_detect(string = names(dings@meta.data), pattern = "adams_dif")
+)]
+
+limits_adj <- c(min(scores_adams),max(scores_adams))
+
+
+
+dings <- BAL_macrophages
+dings <-   add_named_module_score( 
+  seurat_object   = BAL_macrophages, 
+  genesets_list_named = adams_dif_set %>% lapply(function(x) ensemblizer(x)),
+  score_id = "adams_dif"
+)
+```
+
+```{r}
+module_score_umaps(object = dings,pattern = "adams_dif", limits = limits_adj )
+module_score_umaps(object = dings,pattern = "adams_dif", limits = c(-0.5,1) )
+```
+
+
+```{r}
+
+
+data_adams <- extract_score_data(seurat_obj = dings, scores=scores_adams, score_id = "adams_dif")%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names),
+         Geneset=str_replace_all(Geneset, pattern= "adams_dif", replacement = "") %>% factor())
+
+ps_adams <- wilcox_cluster_to_rest(data = data_adams, geneset_var = "Geneset", cluster_var="Cluster")
+ggplot2::ggplot(
+  data = data_adams,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme(limits = limits_adj, p_score=ps_adams)
+```
+
+```{r}
+dings %>% SetIdent(value="patient") %>%  VlnPlot(features = str_subset(dings@meta.data %>% names, pattern = "adams_dif") )
+
+tibble(sex=BAL_macrophages$sex, donor=BAL_macrophages$patient) %>% distinct()
+```
+```{r}
+dings %>% VlnPlot(features = "mac_alv_ipf_vs_copd_adams_dif", split.by = "patient")
+dings %>% VlnPlot(features = "mac_alv_ipf_vs_ctr_adams_dif", split.by = "patient")
+```
+

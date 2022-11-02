@@ -1,0 +1,319 @@
+---
+title: "BAL Macrophage genest enrichment scores- comparing with downsampled groups"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(janitor)
+library(magrittr)
+library(effsize)
+```
+
+```{r functions, include=FALSE}
+source(file="functions_bal_macrophages.R")
+source(file="initialize_bal_data.R")
+```
+
+
+
+Part of the argument of the enrichment of gene scores in the paper Wendisch, Dietrich,.. et. al is implicitly based on a comparison of p-values between cell clusters on a cell to cell basis. One of the problems with arguing "significance" here is that the p-value in a wilcoxon test is a function to sample size( not cell number is a pseudo sample size as the number of cells per donor varies). Since group sizes vary over one order of magnitude, it is possible that the conclusions are skewed, with higher p-values atributed to larger cell clusters.
+
+```{r}
+BAL_macrophages$Cluster %>% table()
+```
+
+In order to get a first impression of this skew, the following analysis should compare the results of the paper with p-values from equal sample sizes attained through downsampling the Seurat object. Later on measures of effect size should be added to the analysis to be enable conclusions about ~degree of related~.
+Since module scores of genesets from fibrosis papers are not commpared to other (reference-)genesets the question that can be answered  is
+"Given a number of genesets from macrophage subtypes in fibrosis, which genesets are the most similar to covid-19 BAL macrophages cellcluster"
+
+To be able to state that a cell cluster is fibrosis-associated a comparion has to be made to BAL genesets from other states such as COPD, cancer, other infections, rheumatic diseaes etc.
+
+However a more tentative statement can be made by comparing the cell scores to reference genesets from the same data such as cluster defining genes etc.
+
+
+
+#================================================================
+# Covid 19 data sets
+# .original Seurat object
+# ..Module scores 
+## ..1. UMAP embedding with cell-based scores
+
+
+```{r ,fig.width = 18, fig.height = 12}
+Idents(BAL_macrophages) <- "Cluster"
+set.seed(300)
+BAL_macrophages_small_1 <- subset(BAL_macrophages, downsample=150)
+
+
+
+BAL_macrophages <- add_named_module_score( 
+  seurat_object   = BAL_macrophages, 
+  genesets_list_named = genesets_covid %>% lapply(function(x) ensemblizer(x)),
+  score_id = "score_cov"
+  )
+BAL_macrophages_small_1 <- add_named_module_score( 
+  seurat_object   = BAL_macrophages_small_1, 
+  genesets_list_named = genesets_covid %>% lapply(function(x) ensemblizer(x)),
+  score_id = "score_cov"
+  )
+
+
+
+scores_cov <- BAL_macrophages@meta.data[, which(
+  stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "score_cov")
+  )]
+
+scores_cov_small_1 <- BAL_macrophages_small_1@meta.data[, which(
+  stringr::str_detect(string = names(BAL_macrophages_small_1@meta.data), pattern = "score_cov")
+  )]
+
+
+# module_score_umaps(object = BAL_macrophages,pattern = "score_cov" )
+# ggplot2::ggsave(  "BAL-macrophages_covid-19-geneset-score-umap.png", width = 18, height = 12)
+# 
+# module_score_umaps(object = BAL_macrophages_small_1,pattern = "score_cov" )
+# ggplot2::ggsave(  "BAL_macrophages_small_1_covid-19-geneset-score-umap.png", width = 18, height = 12)
+
+
+```
+
+## ..2. Violin plots as cluster-based population summaries
+
+
+```{r}
+# Re-shape data
+data_cov <- extract_score_data(
+  seurat_obj = BAL_macrophages, 
+  scores=scores_cov, 
+  score_id = "score_cov") %>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names))
+
+data_cov_small_1 <- extract_score_data(seurat_obj = BAL_macrophages_small_1, scores_ = scores_cov_small_1, score_id = "score_cov")%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names))
+```
+
+```{r}
+ps_cov <- wilcox_cluster_to_rest(data = data_cov, geneset_var = "Geneset", "Cluster")
+ps_cov_small_1 <- wilcox_cluster_to_rest(data = data_cov_small_1, geneset_var = "Geneset", "Cluster")
+```
+
+
+```{r,fig.width = 18, fig.height = 12}
+# Plot
+limits <- c(-0.5,1)
+
+ggplot2::ggplot(
+  data = data_cov,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme(limits = limits, p_score = ps_cov)#
+# Save plot
+# ggplot2::ggsave(
+#   "BAL-macrophages_COVID-19-geneset-score-violins.png", width = 18, height = 12
+# )
+ggplot2::ggplot(
+  data = data_cov_small_1,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme(limits = limits,ps_cov_small_1)#
+# Save plot
+# ggplot2::ggsave(
+#   "BAL-macrophages_small_1__COVID-19-geneset-score-violins.png", width = 18, height = 12
+# )
+
+```
+
+#==================================================
+# Fibrosis datasets 
+## Umap
+
+
+
+```{r,fig.width = 18, fig.height = 12}
+BAL_macrophages <- add_named_module_score( 
+  seurat_object   = BAL_macrophages, 
+  genesets_list_named = genesets_fibrosis %>% lapply(function(x) ensemblizer(x)),
+  score_id = "score_fibrosis"
+)
+BAL_macrophages_small_1 <- add_named_module_score( 
+  seurat_object   = BAL_macrophages_small_1, 
+  genesets_list_named = genesets_fibrosis %>% lapply(function(x) ensemblizer(x)),
+  score_id = "score_fibrosis"
+)
+
+scores_fibrosis <- BAL_macrophages@meta.data[, which(
+  stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "score_fibrosis")
+)]
+
+scores_fibrosis_small_1 <- BAL_macrophages_small_1@meta.data[, which(
+  stringr::str_detect(string = names(BAL_macrophages_small_1@meta.data), pattern = "score_fibrosis")
+)]
+
+module_score_umaps(object = BAL_macrophages,pattern = "score_fibrosis" )
+ggplot2::ggsave(  "BAL-macrophages_fibrosis-geneset-score-umap.png", width = 18, height = 12)
+
+module_score_umaps(object = BAL_macrophages_small_1,pattern = "score_fibrosis" )
+ggplot2::ggsave(  "BAL_macrophages_small_1_fibrosis-geneset-score-umap.png", width = 18, height = 12)
+
+```
+
+
+```{r}
+# Re-shape data
+data_fibrosis <- extract_score_data(seurat_obj = BAL_macrophages, scores=scores_fibrosis, score_id = "score_fibrosis")%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names),
+         Geneset=str_replace_all(Geneset, pattern= "_score_fibrosis", replacement = "") %>% factor())
+
+data_fibrosis_small_1 <- extract_score_data(seurat_obj = BAL_macrophages_small_1, scores_ = scores_fibrosis_small_1, score_id = "score_fibrosis")%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names),
+         Geneset=str_replace_all(Geneset, pattern= "_score_fibrosis", replacement = "")%>% factor())
+
+
+```
+
+```{r}
+ps <- wilcox_cluster_to_rest(data = data_fibrosis, geneset_var = "Geneset", cluster_var="Cluster")
+ps_small1 <- wilcox_cluster_to_rest(data = data_fibrosis_small_1, geneset_var = "Geneset", "Cluster")
+```
+
+```{r,fig.width = 18, fig.height = 12}
+# Plot
+limits <- c(-0.5,1)
+
+ggplot2::ggplot(
+  data = data_fibrosis,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme(limits = limits, p_score=ps)#
+# Save plot
+# ggplot2::ggsave(
+#   "BAL-macrophages_fibrosis-19-geneset-score-violins.png", width = 18, height = 12
+# )
+ggplot2::ggplot(
+  data = data_fibrosis_small_1,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme(limits = limits, p_score=ps_small1)#
+# Save plot
+# ggplot2::ggsave(
+#   "BAL-macrophages_small_1_fibrosis-19-geneset-score-violins.png", width = 18, height = 12
+# )
+
+```
+
+
+
+
+```{r}
+
+
+library(VennDiagram)
+
+
+
+SET1 <- genesets_fibrosis$`Mors_1SPP1+MIPF`
+SET2 <- genesets_fibrosis$Reyf_MCluster1
+SET3 <- genesets_fibrosis$Ayau_IPFeMp
+
+
+
+v <- venn.diagram(list(SET1 = SET1, SET2 = SET2, SET3 = SET3),
+                  fill = c("red", "green","blue"),
+                  alpha = c(0.5, 0.5, 0.5), cat.cex = 1.5, cex=1.5,
+                  filename=NULL)
+grid.newpage()
+grid.draw(v)
+
+
+v[[7]]$label  <- paste(setdiff(SET1, intersect(SET2,SET3)), collapse="\n") 
+v[[8]]$label <- paste(setdiff(intersect(SET1,SET2),intersect(SET1, intersect(SET2,SET3))), collapse="\n")
+v[[9]]$label <- paste(setdiff(SET2, intersect(SET1,SET3)), collapse="\n")
+v[[10]]$label <- paste(setdiff(intersect(SET3,SET1),intersect(SET3, intersect(SET1,SET2))), collapse="\n")
+v[[11]]$label <- paste(intersect(SET1, intersect(SET2,SET3)), collapse="\n")
+v[[12]]$label <- paste(setdiff(intersect(SET2,SET3),intersect(SET2, intersect(SET1,SET3))), collapse="\n")
+v[[13]]$label <- paste(setdiff(SET3, intersect(SET1,SET2)), collapse="\n")
+
+
+grid.newpage()
+grid.draw(v)
+```
+
+```{r}
+overlap_set <- c("LILRB4","CTSZ", "APOE", "MMP9", "CCL2","CHIT1","CD14", "FNIP2", "SPP1", "LGMN","CD84","SDC2", "GPNMB")
+overlap_set_lst <- list("overlap_set"= overlap_set %>% ensemblizer_2())
+
+BAL_macrophages <- add_named_module_score(seurat_object =  BAL_macrophages,genesets_list_named = overlap_set_lst, score_id = "cust")
+
+FeaturePlot(BAL_macrophages, features = "overlap_set_cust")
+VlnPlot(BAL_macrophages, features = "overlap_set_cust")
+dot_plot_cluster(genes_sorted = overlap_set)
+
+```
+
+```{r}
+donor_clus_avg_scores_overlap_set <- tibble(overlap_set_cust=BAL_macrophages$overlap_set_cust )%>%  mutate(
+            Cluster= as_factor(BAL_macrophages@meta.data$Cluster),
+            donor=as_factor(BAL_macrophages@meta.data$patient)) %>%
+    pivot_longer(cols = contains("overlap_set"),names_to = "Geneset", values_to = "Score") %>% 
+  group_by(Cluster,donor, Geneset) %>% summarise(Score=mean(Score))%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names),
+         Geneset=str_replace_all(Geneset, pattern= "_score_fibrosis", replacement = "") %>% factor())
+
+ggplot2::ggplot(
+  data = donor_clus_avg_scores_overlap_set,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    color = Cluster
+  )
+) +geom_jitter()+
+  facet_wrap(vars(Geneset))+
+  theme(axis.text.x=element_text(angle = 90))
+
+cohens_d_module_ovelap_setr <- tibble(geneset=character(),cluster=character(),cohens_d=numeric())
+data <- donor_clus_avg_scores_overlap_set
+for (gs in levels(data$Geneset)) {
+  #print(gs)
+  for (clus in levels(data$Cluster) ) { #data %>% filter(Geneset==gs) %>% pull(Cluster) %>% unique()
+    #print(clus)
+    ctrl <- data%>% filter(Geneset==gs, Cluster!=clus) %>% pull(Score)
+    treat <- data%>% filter(Geneset==gs, Cluster==clus) %>% pull(Score)
+    d <- cohen.d(treat, ctrl)
+    cohens_d_module_ovelap_setr %<>%  add_row(geneset=gs,cluster=clus,cohens_d=d$estimate)
+  }
+}
+
+two_highest_os <- donor_clus_avg_scores_overlap_set %>% group_by(Geneset, Cluster) %>% summarise(mean_score=mean(Score)) %>% top_n(wt=mean_score,2) %>% ungroup() %>%  mutate(rank="highest")%>% clean_names()
+n_highest_os <- (two_highest_os$rank=="highest") %>% sum()
+
+
+
+p_avg_scores_t_os <- t_test_cluster_to_rest(donor_clus_avg_scores_overlap_set)%>% arrange(p.value)
+
+dat <- p_avg_scores_t_os %>% clean_names() %>% 
+  left_join(cohens_d_module_ovelap_setr,by = c("geneset", "cluster")) %>% arrange(-p_adjust) %>% left_join(two_highest_os,by = c("geneset", "cluster"))%>% mutate(p_adjust_highest=if_else(rank=="highest", p_value*n_highest_os, NULL)) %>% mutate(sig=if_else(p_adjust_highest<0.05,"sig","not sig.")) %>% arrange(p_adjust_highest) %>% mutate(cluster= factor(cluster, levels = names(color.cluster)))
+
+
+dat%>% ggplot()+geom_tile(aes(x=geneset, y=cluster, fill=cohens_d)) +theme(axis.text.x=element_text(angle = 90))+scale_fill_viridis_c()+geom_point(data =(dat %>% filter(!is.na(sig))) ,aes(x=geneset, y=cluster,color=sig))+scale_color_manual(values = c("not sig"="grey", "sig"="black"))+ scale_y_discrete(names(color.cluster))
+```
+

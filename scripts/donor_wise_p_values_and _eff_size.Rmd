@@ -1,0 +1,279 @@
+---
+title: "donor wise p values and eff size"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(janitor)
+library(magrittr)
+library(effsize)
+
+```
+
+```{r functions}
+source(file="functions_bal_macrophages.R")
+source(file="initialize_bal_data.R")
+
+```
+
+```{r}
+#compute averages of pre-calculated module scores over genesets, clusters and donors
+donor_clus_avg_scores <- scores_fibrosis %>%  mutate(
+            Cluster= as_factor(BAL_macrophages@meta.data$Cluster),
+            donor=as_factor(BAL_macrophages@meta.data$patient)) %>%
+    pivot_longer(cols = contains("score_fibrosis"),names_to = "Geneset", values_to = "Score") %>% 
+  group_by(Cluster,donor, Geneset) %>% summarise(Score=mean(Score))%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names),
+         Geneset=str_replace_all(Geneset, pattern= "_score_fibrosis", replacement = "") %>% factor())
+
+p_avg_scores_wilcox <- wilcox_cluster_to_rest(data=donor_clus_avg_scores)
+
+p_avg_scores_t <- t_test_cluster_to_rest(donor_clus_avg_scores)%>% arrange(p.value)
+
+p_avg_scores_t %>% arrange(p.value)
+```
+
+
+```{r}
+ggplot2::ggplot(
+  data = donor_clus_avg_scores,
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    color = Cluster
+  )
+) +geom_jitter()+
+  facet_wrap(vars(Geneset))+
+  theme(axis.text.x=element_text(angle = 90))
+```
+
+
+```{r}
+#calculate cohnes d for each cluster average score of donors  in comparison to all other cluster-donor average scores
+cohens_d_module_scores_fibrosis_donor <- tibble(geneset=character(),cluster=character(),cohens_d=numeric())
+data <- donor_clus_avg_scores
+for (gs in levels(data$Geneset)) {
+  #print(gs)
+  for (clus in levels(data$Cluster) ) { #data %>% filter(Geneset==gs) %>% pull(Cluster) %>% unique()
+    #print(clus)
+    ctrl <- data%>% filter(Geneset==gs, Cluster!=clus) %>% pull(Score)
+    treat <- data%>% filter(Geneset==gs, Cluster==clus) %>% pull(Score)
+    d <- cohen.d(treat, ctrl)
+    cohens_d_module_scores_fibrosis_donor %<>%  add_row(geneset=gs,cluster=clus,cohens_d=d$estimate)
+  }
+}
+
+two_highest <- donor_clus_avg_scores %>% group_by(Geneset, Cluster) %>% summarise(mean_score=mean(Score)) %>% top_n(wt=mean_score,2) %>% ungroup() %>%  mutate(rank="highest")%>% clean_names()
+n_highest <- (two_highest$rank=="highest") %>% sum()
+
+dat <- p_avg_scores_t %>% clean_names() %>% left_join(cohens_d_module_scores_fibrosis_donor,by = c("geneset", "cluster")) %>% arrange(-p_adjust) %>% left_join(two_highest,by = c("geneset", "cluster"))%>% mutate(p_adjust_highest=if_else(rank=="highest", p_value*n_highest, NULL)) %>% mutate(sig=if_else(p_adjust_highest<0.05,"sig","not sig.")) %>% arrange(p_adjust_highest) %>% mutate(cluster= factor(cluster, levels = names(color.cluster)))
+
+
+dat%>% ggplot()+geom_tile(aes(x=geneset, y=cluster, fill=cohens_d)) +theme(axis.text.x=element_text(angle = 90))+scale_fill_viridis_c()+geom_point(data =(dat %>% filter(!is.na(sig))) ,aes(x=geneset, y=cluster,color=sig))+scale_color_manual(values = c("not sig"="grey", "sig"="black"))+ scale_y_discrete(names(color.cluster))
+```
+
+```{r eval=FALSE, include=FALSE}
+#construct list of genestes leaving out one gene each
+Reyf_MCluster1 <- list()
+Reyf_MCluster1[["full"]] <- genesets_fibrosis$Reyf_MCluster1
+
+for (i in seq_along(Reyf_MCluster1[["full"]])) {
+  Reyf_MCluster1[[genesets_fibrosis$Reyf_MCluster1[i]]] <- genesets_fibrosis$Reyf_MCluster1[-i]
+  
+}
+
+Ayau_IPFeM <- list()
+Ayau_IPFeM[["full"]] <- genesets_fibrosis$Ayau_IPFeM
+
+for (i in seq_along(Ayau_IPFeM[["full"]])) {
+  Ayau_IPFeM[[genesets_fibrosis$Ayau_IPFeM[i]]] <- genesets_fibrosis$Ayau_IPFeM[-i]
+  
+}
+
+Reyf_Mfibrosis<- list()
+Reyf_Mfibrosis[["full"]] <- genesets_fibrosis$Reyf_Mfibrosis
+
+for (i in seq_along(Reyf_Mfibrosis[["full"]])) {
+  Reyf_Mfibrosis[[genesets_fibrosis$Reyf_Mfibrosis[i]]] <- genesets_fibrosis$Reyf_Mfibrosis[-i]
+  
+}
+
+Mors_1_SPP_fib <- list()
+Mors_1_SPP_fib[["full"]] <- genesets_fibrosis$`Mors_1SPP1+MIPF`
+
+for (i in seq_along(Mors_1_SPP_fib[["full"]])) {
+  Mors_1_SPP_fib[[genesets_fibrosis$`Mors_1SPP1+MIPF`[i]]] <- genesets_fibrosis$`Mors_1SPP1+MIPF`[-i]
+  
+}
+```
+
+
+```{r}
+# #names(Reyf_MCluster1) <- paste0("Reyf_Clus1", "_w_o_",names(Reyf_MCluster1))
+# BAL_macrophages <- add_named_module_score(BAL_macrophages,
+#                                           score_id = "Reyf_MCluster1_lo",
+#                                           genesets_list_named = Reyf_MCluster1 %>% lapply(function(x) ensemblizer(x)) )
+# 
+# scores_reyf_clus1_loo <- BAL_macrophages@meta.data[, which(
+#   stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "Reyf_MCluster1_lo")
+# )]
+# 
+# donor_clus_avg_scores_reyf_clus1_loo <- scores_reyf_clus1_loo %>%  mutate(
+#             Cluster= as_factor(BAL_macrophages@meta.data$Cluster),
+#             donor=as_factor(BAL_macrophages@meta.data$patient)) %>%
+#     pivot_longer(cols = contains("Reyf_MCluster1_lo"),names_to = "Geneset", values_to = "Score") %>% 
+#   group_by(Cluster,donor, Geneset) %>% summarise(Score=mean(Score))%>% 
+#   mutate(Cluster= factor(Cluster, levels=cluster_names)#,         Geneset=str_replace_all(Geneset, pattern= "_score_fibrosis", replacement = "") %>% factor()
+#          )
+# 
+# reyf_clus1_loo<- donor_clus_avg_scores_reyf_clus1_loo %>% filter(Cluster=="CD163LGMNM") %>% group_by(Geneset) %>% summarise(avg_score=mean(Score), stdev=sd(Score)) %>% arrange(avg_score)
+# ref_ <- reyf_clus1_loo %>% filter(str_detect(Geneset,"full")) %>% pull(avg_score)
+# 
+# reyf_clus1_loo %<>% mutate(avg_score_diff=avg_score-ref_)
+# reyf_clus1_loo %>% mutate(Geneset=str_remove_all(Geneset,pattern="Reyf_Clus1_w_o_")) %>% ggplot(aes(fct_reorder(Geneset,avg_score_diff),avg_score_diff))+ geom_col()+theme(axis.text.x=element_text(angle = 90))  +coord_flip()
+# reyf_clus1_loo
+```
+#weird behavior of RNASE1, check if this is do to the fact that the control geneset in AddModuleScore ist trimmed to unique genes and a skewing towards the 
+```{r eval=FALSE, include=FALSE}
+#takes loooookg!
+#compute all module score scores of the leave one out genesets
+#lo_corr means "leave one out corrrected"
+BAL_macrophages <- add_named_module_score_ctrl_corrected(BAL_macrophages,
+                                          score_id = "Reyf_MCluster1_lo_corr",
+                                          genesets_list_named = lapply(Reyf_MCluster1, function(x){ensemblizer(x)}) )
+
+BAL_macrophages <- add_named_module_score_ctrl_corrected(BAL_macrophages,
+                                          score_id = "Reyf_fibr_lo_corr",
+                                          genesets_list_named = lapply(Reyf_Mfibrosis, function(x){ensemblizer(x)}) )
+
+BAL_macrophages <- add_named_module_score_ctrl_corrected(BAL_macrophages,
+                                          score_id = "Ayau_IPFeMp_lo_corr",
+                                          genesets_list_named = lapply(Ayau_IPFeM, function(x){ensemblizer(x)}) )
+
+BAL_macrophages <- add_named_module_score_ctrl_corrected(BAL_macrophages,
+                                          score_id = "Mors_1_SPP_fib_lo_corr",
+                                          genesets_list_named = lapply(Mors_1_SPP_fib, function(x){ensemblizer(x)}) )
+
+#extract scores from SEurat object
+scores_reyf_clus1_loo_corr <- BAL_macrophages@meta.data[, which(
+  stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "Reyf_MCluster1_lo_corr")
+)]
+
+scores_loo_corr <- BAL_macrophages@meta.data[, which(
+  stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "lo_corr")
+)]
+
+```
+
+
+```{r}
+
+#saveRDS(scores_loo_corr,"scores_loo_corr.rds")
+
+
+####calculate reduction of abolute scores, probably not so intersting because change of other clusters unkown
+reyf_clus1_loo_corr<- donor_clus_avg_scores_reyf_clus1_loo_corr %>% filter(Cluster=="CD163LGMNM") %>% group_by(Geneset) %>% summarise(avg_score=mean(Score), stdev=sd(Score)) %>% arrange(avg_score)
+ref_ <- reyf_clus1_loo_corr %>% filter(str_detect(Geneset,"full")) %>% pull(avg_score)
+
+reyf_clus1_loo_corr %<>% mutate(avg_score_diff=avg_score-ref_)
+reyf_clus1_loo_corr %>% mutate(Geneset=str_remove_all(Geneset,pattern="Reyf_Clus1_w_o_")) %>% ggplot(aes(fct_reorder(Geneset,avg_score_diff),avg_score_diff))+ geom_col()+theme(axis.text.x=element_text(angle = 90))  +coord_flip()
+reyf_clus1_loo_corr
+```
+-
+```{r}
+scores_loo_corr <- read_rds("../data/scores_loo_corr.rds")
+
+# #calculate mean score
+# donor_clus_avg_scores_reyf_clus1_loo_corr <- scores_reyf_clus1_loo_corr %>%  mutate(
+#             Cluster= as_factor(BAL_macrophages@meta.data$Cluster),
+#             donor=as_factor(BAL_macrophages@meta.data$patient)) %>%
+#     pivot_longer(cols = contains("Reyf_MCluster1_lo_corr"),names_to = "Geneset", values_to = "Score") %>% 
+#   group_by(Cluster,donor, Geneset) %>% summarise(Score=mean(Score))%>% 
+#   mutate(Cluster= factor(Cluster, levels=cluster_names))
+
+
+donor_clus_avg_scores_loo_cor <- scores_loo_corr %>%  mutate(
+            Cluster= as_factor(BAL_macrophages@meta.data$Cluster),
+            donor=as_factor(BAL_macrophages@meta.data$patient)) %>%
+    pivot_longer(cols = contains("lo_corr"),names_to = "gene_lo", values_to = "Score") 
+
+# separate(col= gene_lo, into = c("gene_lo", "Geneset"),sep="_"#,extra = "merge" )
+##this was to slow
+gene_lo_slit <- donor_clus_avg_scores_loo_cor%>%  pull(gene_lo) %>% str_split_fixed(string=., pattern = "_", n=2 ) %>% as_tibble()
+
+colnames(gene_lo_slit) <- c("gene_lo", "Geneset")
+donor_clus_avg_scores_loo_cor <- donor_clus_avg_scores_loo_cor %>% 
+  select(-gene_lo) %>% 
+  bind_cols(gene_lo_slit)
+
+  group_by(Cluster,donor,gene_lo, Geneset) %>% summarise(Score=mean(Score))%>% 
+  mutate(Cluster= factor(Cluster, levels=cluster_names))
+
+
+# #calculate cohens d of Cluster-donor averages comparing LGMN LCuster to rest, as well as differnc of means of those groups
+# cohens_d_loo_reyf1 <- donor_clus_avg_scores_reyf_clus1_loo_corr %>%
+#   mutate(Cluster= fct_other(Cluster,keep = "CD163LGMNM")) %>% 
+#   group_by(Geneset) %>% 
+#   summarise(cohens=(cohen.d(Score[Cluster=="CD163LGMNM"],Score[Cluster!="CD163LGMNM"])$estimate), mean_dif=mean(Score[Cluster=="CD163LGMNM"])-mean(Score[Cluster!="CD163LGMNM"]) ) %>%
+#   ungroup() %>% 
+#   mutate(rank_conhens=rank(cohens), rank_meandiff=rank(mean_dif)) %>% mutate(gene=str_remove_all(Geneset, "_Reyf_MCluster1_lo_corr") )
+
+cohens_d_lo <- donor_clus_avg_scores_loo_cor %>%
+  mutate(Cluster= fct_other(Cluster,keep = "CD163LGMNM")) %>% 
+  group_by(gene_lo,Geneset) %>% 
+  summarise(cohens=(cohen.d(Score[Cluster=="CD163LGMNM"],Score[Cluster!="CD163LGMNM"])$estimate), mean_dif=mean(Score[Cluster=="CD163LGMNM"])-mean(Score[Cluster!="CD163LGMNM"]) ) %>%
+  ungroup() %>% 
+  mutate(rank_conhens=rank(cohens), rank_meandiff=rank(mean_dif)) #%>% mutate(gene=str_remove_all(Geneset, "_Reyf_MCluster1_lo_corr") )
+
+cohens_d_lo %>% arrange(gene_lo)
+write_rds(cohens_d_lo, "../output/cohens_d_lo.rds")
+```
+
+```{r}
+FeaturePlot(BAL_macrophages, features = "full_Reyf_MCluster1_lo_corr")
+FeaturePlot(BAL_macrophages, features = "full_Reyf_MCluster1_lo")
+VlnPlot(BAL_macrophages, features = "full_Reyf_MCluster1_lo_corr")
+VlnPlot(BAL_macrophages, features = "full_Reyf_MCluster1_lo")
+VlnPlot(BAL_macrophages, features = ensemblizer("CHI3L1"))+ ggtitle("CHI3L1")
+VlnPlot(BAL_macrophages, features = ensemblizer("RNASE1"))+ ggtitle("RNASE1")
+
+
+```
+```{r}
+clus <- "Reyf_MCluster1_lo_corr"
+x <- cohens_d_lo %>% filter(Geneset==clus) %>% arrange(mean_dif) %>% pull(gene_lo)
+dot_plot_cluster(genes_sorted=x[!str_detect(x,"full")]) +ggtitle(clus)
+#ggsave(paste0(clus,"r.png"), width = 10, height = 17)
+
+clus <- "Mors_1_SPP_fib_lo_corr"
+x <- cohens_d_lo %>% filter(Geneset==clus) %>% arrange(mean_dif) %>% pull(gene_lo)
+dot_plot_cluster(genes_sorted=x[!str_detect(x,"full")]) +ggtitle(clus)
+#ggsave(paste0(clus,"r.png"), width = 10, height = 17)
+
+clus <- "Ayau_IPFeMp_lo_corr"
+x <- cohens_d_lo %>% filter(Geneset==clus) %>% arrange(mean_dif) %>% pull(gene_lo)
+dot_plot_cluster(genes_sorted=x[!str_detect(x,"full")]) +ggtitle(clus)
+#ggsave(paste0(clus,"r.png"), width = 10, height = 17)
+
+
+clus <- "Reyf_fibr_lo_corr"
+x <- cohens_d_lo %>% filter(Geneset==clus) %>% arrange(mean_dif) %>% pull(gene_lo)
+dot_plot_cluster(genes_sorted=x[!str_detect(x,"full")]) +ggtitle(clus)
+#?aggsave(paste0(clus,"r.png"), width = 10, height = 17)
+
+```
+
+```{r}
+x <- arrange(cohens_d_loo,mean_dif) %>% pull(gene)
+x <- x[!str_detect(x,"full")]
+dot_plot_cluster(genes_sorted=x)
+```
+```{r}
+x <- c("SDC2", "LGMN", "GPNMB", "CD84", "SPP1")
+dot_plot_cluster(genes_sorted=x)
+```
+

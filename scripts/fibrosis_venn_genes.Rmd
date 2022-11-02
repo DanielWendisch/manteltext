@@ -1,0 +1,39 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+
+library(VennDiagram)
+
+
+
+SET1 <- genesets_fibrosis$`Mors_1SPP1+MIPF`
+SET2 <- genesets_fibrosis$Reyf_MCluster1
+SET3 <- genesets_fibrosis$Ayau_IPFeMp
+
+
+
+v <- venn.diagram(list(SET1 = SET1, SET2 = SET2, SET3 = SET3),
+                  fill = c("red", "green","blue"),
+                  alpha = c(0.5, 0.5, 0.5), cat.cex = 1.5, cex=1.5,
+                  filename=NULL)
+grid.newpage()
+grid.draw(v)
+
+
+v[[7]]$label  <- paste(setdiff(SET1, intersect(SET2,SET3)), collapse="\n") 
+v[[8]]$label <- paste(setdiff(intersect(SET1,SET2),intersect(SET1, intersect(SET2,SET3))), collapse="\n")
+v[[9]]$label <- paste(setdiff(SET2, intersect(SET1,SET3)), collapse="\n")
+v[[10]]$label <- paste(setdiff(intersect(SET3,SET1),intersect(SET3, intersect(SET1,SET2))), collapse="\n")
+v[[11]]$label <- paste(intersect(SET1, intersect(SET2,SET3)), collapse="\n")
+v[[12]]$label <- paste(setdiff(intersect(SET2,SET3),intersect(SET2, intersect(SET1,SET3))), collapse="\n")
+v[[13]]$label <- paste(setdiff(SET3, intersect(SET1,SET2)), collapse="\n")
+
+
+grid.newpage()
+grid.draw(v)
+```
+

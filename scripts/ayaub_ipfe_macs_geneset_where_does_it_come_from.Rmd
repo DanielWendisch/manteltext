@@ -1,0 +1,122 @@
+---
+title: "Where does the Ayaub IPFeMac gene set come from"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(janitor)
+library(magrittr)
+library(cowplot)
+
+```
+
+```{r functions}
+source(file="functions_bal_macrophages.R")
+```
+
+# loading seurat object
+```{r}
+BAL_macrophages <- load_clean_bal_seurat()
+gene_ensb <- BAL_macrophages@misc$features$SYMBOL
+names(gene_ensb) <- BAL_macrophages@misc$features$ENSEMBL
+features <- BAL_macrophages@misc$features
+cluster_names <- c("Monocytes" , "MonoM" , "CD163LGMNM" ,    "AM1"  ,  "AM2"  ,   "ProlifAM")
+
+```
+
+```{r}
+color.cluster <- c(
+  "Monocytes"     = "#009E73",
+  "MonoM"       = "#E69F00",
+  "CD163LGMNM" = "#D55E00",
+  "AM1"         = "#A020F0",
+  "AM2"         = "#0072B2",
+  "ProlifAM"   = "#56B4E9"
+)
+BAL_macrophages@misc$colors$Cluster <- color.cluster
+```
+# Retrieve fibrosis gene set dictionary
+```{r}}
+dictionary <- load_clean_dictionary()
+genesets_fibrosis<- make_genesets(dictionary = dictionary, key = "IPF")
+dict_fibrosis <- make_dict(dictionary = dictionary, key="IPF")
+print(genesets_fibrosis%>% str())
+```
+
+
+
+
+```{r}
+ayaub_self_copied <- c("CD84", "LIPA", "LGMN", "NCEH1", "CCL18", "MYO1E", "CSTB", "HCST", "APOC1", "C9", "PLD3", "ACP5", "CD9", "APOE", "IFI27", "LPL", "GPNMB", "SPP1")
+ayaub_self_copied
+```
+
+#Are the genes spelled correctly? -yes
+```{r}
+ayaub_self_copied %in% (features %>% pull(SYMBOL))
+```
+
+#What is the overlap of the genes I found and the genes in the published dataset?
+
+```{r}
+intersect(ayaub_self_copied, genesets_fibrosis$Ayau_IPFeMp)
+```
+# Which genes of the published fibrosis dataset are not found in the selfcopied dataset?
+```{r}
+
+ggdraw()
+woher_kommen_diese_gene <- setdiff(genesets_fibrosis$Ayau_IPFeMp,ayaub_self_copied)
+woher_kommen_diese_gene
+```
+
+
+```{r}
+
+    dictionary_raw <- readxl::read_excel("C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\oli_github\\genesets.xlsx")
+```
+
+
+```{r}
+FeaturePlot(object = BAL_macrophages, features = ensemblizer("FNIP2")) + ggtitle("FNIP2")
+
+
+for (gene in woher_kommen_diese_gene) {
+  a <- FeaturePlot(object = BAL_macrophages, features = ensemblizer(gene)) + ggtitle(gene)
+  print(a)
+}
+
+```
+
+```{r}
+BAL_macrophages%<>% AddModuleScore(features = list(ayaub_self_copied %>% ensemblizer()), name = "ayaub_self_copied_real")
+
+BAL_macrophages %>% VlnPlot(features = "ayaub_self_copied_real1")
+BAL_macrophages %>% FeaturePlot(features = "ayaub_self_copied_real1")
+#MWTF!!!!!!!!!
+```
+```{r}
+for (gene in ayaub_self_copied) {
+  a <- FeaturePlot(object = BAL_macrophages, features = ensemblizer(gene)) + ggtitle(gene)
+  print(a)
+}
+```
+
+```{r}
+for (gene in genesets_fibrosis$Adam_ProfibroticM) {
+  a <- FeaturePlot(object = BAL_macrophages, features = ensemblizer(gene)) + ggtitle(gene)
+  print(a)
+}
+```
+
+
+
+```{r}
+
+for (gene in c("WARS","NAMPT") ){
+  a <- FeaturePlot(object = BAL_macrophages, features = ensemblizer(gene)) + ggtitle(gene)
+  print(a)
+}
+
+```
