@@ -286,6 +286,7 @@ pc1_pc2+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3,
 #
 ```{r}
 limits <- c(-0.5,1)
+###Violinplots
 p_ayaub_fib_score_point <- ggplot2::ggplot(
   data = data_fibrosis%>% filter(Geneset=="Ayau_IPFeMp"),
   mapping = ggplot2::aes(
@@ -316,15 +317,13 @@ Reyf_MCluster1_fib_score_point <- ggplot2::ggplot(
     fill = Cluster
   )
 ) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Reyf_MCluster1"))
-
+#######dotplots
 col_axis.genes <- function(x){
   dings_col <- ifelse(x$data$Gene%in% all_intersect,"red",
                     ifelse(x$data$Gene%in% common_genes, "green","black"))
   dings_col <- dings_col[1:length(unique(x$data$Gene))]
   return(list(theme(axis.text.y = element_text(color=dings_col), axis.text.x = element_text(color="black", size=size_))))
 }
-
-
 Reyf_MCluster1_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Reyf_MCluster1_lo_corr")
 Reyf_MCluster1_lo_corr_dot_plot <- Reyf_MCluster1_lo_corr_dot_plot+col_axis.genes(Reyf_MCluster1_lo_corr_dot_plot)
 
@@ -333,7 +332,7 @@ Mors_1_SPP_fib_lo_corr_dot_plot <- Mors_1_SPP_fib_lo_corr_dot_plot+col_axis.gene
 
 Ayau_IPFeMp_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Ayau_IPFeMp_lo_corr")
 Ayau_IPFeMp_lo_corr_dot_plot <- Ayau_IPFeMp_lo_corr_dot_plot+col_axis.genes(Ayau_IPFeMp_lo_corr_dot_plot)
-
+#######
 
 
 
@@ -341,10 +340,7 @@ Ayau_IPFeMp_lo_corr_dot_plot <- Ayau_IPFeMp_lo_corr_dot_plot+col_axis.genes(Ayau
 layout_fib <-"
 ABC
 DEF
-DEF
 "
-
-
  fib_dotplot <- p_ayaub_fib_score_point+#A
    Mors_1_SPP_fib_score_point+#B
     Reyf_MCluster1_fib_score_point+#C
@@ -362,7 +358,7 @@ Reyf_MCluster1_lo_corr_dot_plot+#F
         legend.key.size = unit(0.1, 'cm')
   )
 fib_dotplot
-ggsave("../output/fib_dotplot.tiff", units = "cm", height = 15)
+ggsave("../output/fib_dotplot_2.tiff", units = "cm", height = 10)
 
 
 ```
