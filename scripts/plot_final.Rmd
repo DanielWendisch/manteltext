@@ -199,14 +199,14 @@ ggsave("../output/BAL_comp.tiff",units = "cm")
 
 ```{r}
 
-tf <- read_excel("DatabaseExtract_v_1.01.xlsx")
+tf <- read_excel("../data/DatabaseExtract_v_1.01.xlsx")
 tf_genes <- tf %>% clean_names() %>%  filter(is_tf=="Yes") %>% pull(hgnc_symbol) %>% unique()
 #matrix_mod<-BAL_macrophages_small_1@assays$RNA@data %>% as.matrix()
 # matrix_mod<-BAL_macrophages@assays$RNA@data[rowSums(BAL_macrophages@assays$RNA@data)>5,] %>% as.matrix()
 #matrix_mod <- matrix_mod[rowSums(matrix_mod)>5,]
 # rownames(matrix_mod) <- rownames(matrix_mod) %>% genifiy_2()
 # cor_list <- list()
-"CTSL", "CD163", "HLA-DRB1","FABP4","APOE", "TGFBI","TGFB1" )
+#"CTSL", "CD163", "HLA-DRB1","FABP4","APOE", "TGFBI","TGFB1" )
 genes <- c("CD14","APOC1", "LGMN")
 genes <- c("CD14","S100A8",  "APOC1", "HLA-DRB1", "HLA-DQA1", "C1QA", "LGMN", "CD163")
 
@@ -221,12 +221,12 @@ genes <- c("CD14","S100A8",  "APOC1", "HLA-DRB1", "HLA-DQA1", "C1QA", "LGMN", "C
 #   
 # }
 
-cor_tbl <- read_rds("cor_tbl.rds")
-
-cor_tbl <- cor_list %>% purrr::reduce(bind_rows) #%>% %>% mutate(cor_gene=fct_reorder(cor_gene,.x = genes))
-
-cor_tbl <- cor_list %>% purrr::reduce(bind_rows) %>%  mutate(cor_gene=fct_relevel(cor_gene,genes))
-write_rds(cor_tbl,"cor_tbl.rds")
+cor_tbl <- read_rds("../data/cor_tbl.rds")
+# 
+# # cor_tbl <- cor_list %>% purrr::reduce(bind_rows) #%>% %>% mutate(cor_gene=fct_reorder(cor_gene,.x = genes))
+# 
+# cor_tbl <- cor_list %>% purrr::reduce(bind_rows) %>%  mutate(cor_gene=fct_relevel(cor_gene,genes))
+#write_rds(cor_tbl,"cor_tbl.rds")
 
 top_cor_genes <- cor_tbl %>% filter(gene %in% tf_genes) %>% group_by(cor_gene) %>% slice_max(cor,n=3) %>% pull(gene) %>% unique()
 
@@ -321,7 +321,7 @@ col_axis.genes <- function(x){
   dings_col <- ifelse(x$data$Gene%in% all_intersect,"red",
                     ifelse(x$data$Gene%in% common_genes, "green","black"))
   dings_col <- dings_col[1:length(unique(x$data$Gene))]
-  return(list(theme(axis.text.y = element_text(color=dings_col), axis.text.x = element_text(color="black"))))
+  return(list(theme(axis.text.y = element_text(color=dings_col), axis.text.x = element_text(color="black", size=size_))))
 }
 
 
@@ -340,12 +340,9 @@ Ayau_IPFeMp_lo_corr_dot_plot <- Ayau_IPFeMp_lo_corr_dot_plot+col_axis.genes(Ayau
 
 layout_fib <-"
 ABC
-ABC
 DEF
 DEF
-DEF
-DEF
-GGF"
+"
 
 
  fib_dotplot <- p_ayaub_fib_score_point+#A
@@ -354,16 +351,16 @@ GGF"
   Ayau_IPFeMp_lo_corr_dot_plot+#D 
       Mors_1_SPP_fib_lo_corr_dot_plot+#E
 Reyf_MCluster1_lo_corr_dot_plot+#F
-  plot_spacer()+#G
+ # plot_spacer()+#G
    plot_layout(design = layout_fib,
                guides = 'collect') +
-  plot_annotation(tag_levels = 'A')
-  # theme(text = element_text(size = size_),
-  #       axis.text.y  =element_text(size = size_),
-  #       axis.text.x  =element_text(size = size_-2),
-  #       title=element_text(size = size_) ,
-  #       legend.key.size = unit(0.1, 'cm')
-  # )
+  plot_annotation(tag_levels = 'A')&
+  theme(text = element_text(size = size_),
+        # axis.text.y  =element_text(size = size_),
+        # axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) ,
+        legend.key.size = unit(0.1, 'cm')
+  )
 fib_dotplot
 ggsave("../output/fib_dotplot.tiff", units = "cm", height = 15)
 
