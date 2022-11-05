@@ -202,13 +202,14 @@ add_named_module_score_ctrl_corrected <- function(
 module_score_umaps <- function(object, 
                                #genesets_list, 
                                genesets_levels="",
+
                                limits = c(-0.5, 1),
                                pattern) {
   
   #copy metadata into separte dataframe
   scores <- object@meta.data[, which(
     stringr::str_detect(string = names(object@meta.data), pattern )
-  )]
+  )] #%>% as_tibble()
   #names(scores) <- names(idsets) ################
   ##############
   ############# still sonderzeichen
@@ -275,6 +276,89 @@ module_score_umaps <- function(object,
     )
   return(p1)
 }
+#######
+
+module_score_one_umap <- function(object, 
+                               #genesets_list, 
+                               genesets_levels="",
+                               
+                               limits = c(-0.5, 1),
+                               pattern) {
+  
+  #copy metadata into separte dataframe
+  scores <- tibble(
+    object@meta.data[, which(
+    stringr::str_detect(string = names(object@meta.data), pattern )
+  )] )
+  
+  colnames(scores)[1] <- pattern
+  #names(scores) <- names(idsets) ################
+  ##############
+  ############# still sonderzeichen
+  
+  scores$x <- object@reductions$umap@cell.embeddings[, 1]
+  scores$y <- object@reductions$umap@cell.embeddings[, 2]
+  
+  plot_dat <- tidyr::gather(scores, "Geneset", "Score", -x, -y)
+  
+  if (genesets_levels!=""){
+    plot_dat$Geneset <- factor(
+      plot_dat$Geneset, genesets_levels)}
+  
+  # Set colorscale limits
+  
+  plot_dat$Score[plot_dat$Score > max(limits)] <- max(limits)
+  plot_dat$Score[plot_dat$Score < min(limits)] <- min(limits)
+  ##############??
+  plot_dat <- plot_dat[order(plot_dat$Score), ]
+  
+  # Plot
+  p1 <- ggplot2::ggplot(
+    data = plot_dat,
+    mapping = ggplot2::aes(
+      x   = x,
+      y   = y,
+      col = Score
+    )
+  ) +
+    ggplot2::geom_point(size = 0.25) +
+    ggplot2::facet_wrap(~Geneset, nrow = 4)+
+    ggplot2::scale_color_distiller(
+      palette = "RdYlBu", direction = -1, limits = limits
+    ) +
+    ggplot2::theme_void(base_size = 20) +
+    ggplot2::guides(
+      col = ggplot2::guide_colorbar(
+        barwidth = 1, barheight = 15, 
+        frame.colour = "black", ticks.colour = "black"
+      )
+    ) +
+    ggplot2::coord_fixed() + 
+    ggplot2::annotate(
+      geom  = "segment", 
+      size  = 0.25,
+      x     = min(plot_dat$x)*1.1, 
+      xend  = seq(min(plot_dat$x), max(plot_dat$x), length.out = 100)[25], 
+      y     = min(plot_dat$y)*1.1, 
+      yend  = min(plot_dat$y)*1.1, 
+      arrow = grid::arrow(
+        angle  = 30, length = ggplot2::unit(0.05, "inches"), type   = "closed"
+      )
+    ) +
+    ggplot2::annotate(
+      geom  = "segment",
+      size  = 0.25,
+      x     = min(plot_dat$x)*1.1, 
+      xend  = min(plot_dat$x)*1.1, 
+      y     = min(plot_dat$y)*1.1, 
+      yend  = seq(min(plot_dat$y), max(plot_dat$y), length.out = 100)[25], 
+      arrow = grid::arrow(
+        angle  = 30, length = ggplot2::unit(0.05, "inches"), type   = "closed"
+      )
+    )
+  return(p1)
+}
+
 
 
 #####################

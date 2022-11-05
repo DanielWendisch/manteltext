@@ -16,10 +16,13 @@ library(janitor)
 
 source("functions_bal_macrophages.R")
 source("initialize_bal_data.R")
+source("loo_module_score_dotplots.R")
+source("fibrosis_datasets_effect_size_calc.R")
+size_ <- 6
 ```
 
 ```{r}
-size_ <- 6
+
 umap_plot <- DimPlot(BAL_macrophages )
 
 umap_plot <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_point(aes(alpha=0.2))+
@@ -238,7 +241,10 @@ ggplot(aes(gene,cor_gene, fill=cor)) +geom_tile()+ theme(axis.text.x=element_tex
     palette = "RdBu"
   )
 cor_hp
-
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("ETV5"), reduction = "pca")+ggtitle("ETV5")
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("GLMP"), reduction = "pca")+ggtitle("GLMP")
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("NR1H3"), reduction = "pca")+ggtitle("NR1H3")
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("MAFB"), reduction = "pca")+ggtitle("MAFB")
   ###########
 ```
 
@@ -283,8 +289,33 @@ pc1_pc2+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3,
 
 ```
 
-#
 ```{r}
+
+
+umap_a_ipf <- module_score_one_umap(object = BAL_macrophages,pattern = "Ayau_IPFeMp_score_fibrosis" )#+ggtitle("Ayau_IPFeMp_score_fibrosis")
+
+
+
+
+
+
+heatmap_effsize <- dat%>% 
+  filter(geneset!="Adam_ProfibroticM") %>% 
+  ggplot()+geom_tile(aes(x=geneset, y=cluster, fill=cohens_d)) +
+  scale_fill_viridis_c()+geom_point(data =(dat %>% filter(!is.na(sig))) ,aes(x=geneset, y=cluster,color=sig))+scale_color_manual(values = c("not sig"="grey", "sig"="black"))+ scale_y_discrete(names(color.cluster))+
+  theme(axis.text.x=element_text(angle = 45,  hjust=1,),
+        axis.text.y=element_text( colour = color.cluster),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text("gene set"))+ 
+  xlab("gene set")
+
+top_2 <- umap_a_ipf+plot_spacer()+heatmap_effsize
+```
+
+#
+
+```{r}
+
 limits <- c(-0.5,1)
 ###Violinplots
 p_ayaub_fib_score_point <- ggplot2::ggplot(
@@ -324,6 +355,7 @@ col_axis.genes <- function(x){
   dings_col <- dings_col[1:length(unique(x$data$Gene))]
   return(list(theme(axis.text.y = element_text(color=dings_col), axis.text.x = element_text(color="black", size=size_))))
 }
+
 Reyf_MCluster1_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Reyf_MCluster1_lo_corr")
 Reyf_MCluster1_lo_corr_dot_plot <- Reyf_MCluster1_lo_corr_dot_plot+col_axis.genes(Reyf_MCluster1_lo_corr_dot_plot)
 
@@ -360,18 +392,38 @@ Reyf_MCluster1_lo_corr_dot_plot+#F
 fib_dotplot
 ggsave("../output/fib_dotplot_2.tiff", units = "cm", height = 10)
 
+layout_fib <-"
+ABC
+DEF
+GHI
+"
+ comp_plot <- umap_a_ipf+
+   plot_spacer()+
+   heatmap_effsize+
+   p_ayaub_fib_score_point+
+   Mors_1_SPP_fib_score_point+
+    Reyf_MCluster1_fib_score_point+
+  Ayau_IPFeMp_lo_corr_dot_plot+
+      Mors_1_SPP_fib_lo_corr_dot_plot+
+Reyf_MCluster1_lo_corr_dot_plot+
+ # +#G
+   plot_layout(design = layout_fib,
+               guides = 'collect') +
+  plot_annotation(tag_levels = 'A')&
+  theme(text = element_text(size = size_),
+        # axis.text.y  =element_text(size = size_),
+        # axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) ,
+        legend.key.size = unit(0.1, 'cm')
+  )
 
+
+comp_plot
+
+top_2/ fib_dotplot
 ```
 ```{r}
-clean_hgnc <- . %>% ensemblizer_2() %>% genifiy_2() %>% discard(is.na)
-s1 <- genesets_fibrosis$Reyf_MCluster1 %>% clean_hgnc
-s2 <- genesets_fibrosis$`Mors_1SPP1+MIPF`%>% clean_hgnc
-s3 <- genesets_fibrosis$Ayau_IPFeMp%>% clean_hgnc
-all_intersect <- Reduce(intersect, list(s1,s2,s3 ))
-common_genes <- c(
-intersect(s1,s2),
-intersect(s2,s3),
-intersect(s1,s3)) %>% unique()
+
 
 ```
 

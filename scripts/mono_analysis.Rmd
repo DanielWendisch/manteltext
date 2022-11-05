@@ -1,0 +1,71 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(tidyverse)
+source(file="functions_bal_macrophages.R")
+#source(file="initialize_bal_data.R")
+source("functions_mono.R")
+```
+
+```{r}
+
+mono <- "C:/Users/danne/raw_data/wendisch_et_al_final/oli_github/Monocytes.Rds" %>% read_rds()
+mono@assays$SCoV2@key <- "scov_"
+DefaultAssay(mono)<- "SCT"
+
+```
+```{r}
+mono%>% DimPlot(reduction = "umap")
+VlnPlot(object=mono,features=ensemblizer_seur("LGMN"))
+```
+
+```{r}
+mono_fib_geneset_ensg <- genesets_fibrosis %>% lapply(function(x) ensemblizer_seur(x)) %>% 
+  lapply(function(x) genifiy_seur(x)) %>% 
+  lapply(function(x) ensemblizer_seur(x)) %>% 
+  lapply(function(x) na.omit(x))  
+  
+
+mono_genset_select <- mono_fib_geneset_ensg[c(3,7,2,11,13,14)]
+
+mono <- add_named_module_score( 
+  seurat_object   = mono ,
+  genesets_list_named = mono_genset_select,
+  score_id = "score_fibrosis",
+  nbin_ = 8
+)
+
+VlnPlot(mono, "intersect_set_score_fibrosis")
+VlnPlot(mono, "overlap_set_score_fibrosis")
+VlnPlot(mono, "Ayau_IPFeMp_score_fibrosis")
+VlnPlot(mono, "Mors_1SPP1+MIPF_score_fibrosis")
+VlnPlot(mono ,"Reyf_MCluster1_score_fibrosis")
+VlnPlot(mono, ensemblizer_seur("APOE"))
+
+
+FeatureScatter(mono, feature1 ="nCount_SCoV2", feature2 = "overlap_set_score_fibrosis")
+
+```
+```{r}
+dot_plot_condition_seur(genes_sorted = mono_genset_select$intersect_set %>% genifiy_seur() , seur_obj = mono )
+dot_plot_condition_seur(genes_sorted = mono_genset_select$overlap_set %>% genifiy_seur() , seur_obj = mono )
+
+dot_plot_condition_seur(genes_sorted = mono_genset_select$`Mors_1SPP1+M` %>% genifiy_seur() , seur_obj = mono )
+
+VlnPlot(mono , ensemblizer_seur("GLMP"), group.by = "condition")
+
+VlnPlot(mono , ensemblizer_seur("ETV5"), group.by = "condition")
+
+VlnPlot(mono , ensemblizer_seur("MAFB"), group.by = "condition")
+
+VlnPlot(mono , ensemblizer_seur("NR1H3"), group.by = "condition")
+
+VlnPlot(mono , ensemblizer_seur("MAF"), group.by = "condition")
+
+
+```
+

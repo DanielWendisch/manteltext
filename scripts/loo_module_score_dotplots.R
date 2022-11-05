@@ -1,5 +1,7 @@
 
 library(effsize)
+print("hallo")
+if(!"scores_loo_corr.rds" %in% list.files("C:/Users/danne/R_projects/manteltext_git/data/")){
 
 if (!("scores_loo_corr.rds" %in% (list.files("data/")))) {
   #construct list of genestes leaving out one gene each
@@ -69,7 +71,7 @@ scores_loo_corr <- BAL_macrophages@meta.data[, which(
 
 saveRDS(scores_loo_corr,"data/scores_loo_corr.rds")
 }
-
+}
 ####calculate reduction of abolute scores, probably not so intersting because change of other clusters unkown
 
 # reyf_clus1_loo_corr<- donor_clus_avg_scores_reyf_clus1_loo_corr %>% filter(Cluster=="CD163LGMNM") %>% group_by(Geneset) %>% summarise(avg_score=mean(Score), stdev=sd(Score)) %>% arrange(avg_score)
@@ -79,7 +81,7 @@ saveRDS(scores_loo_corr,"data/scores_loo_corr.rds")
 # reyf_clus1_loo_corr %>% mutate(Geneset=str_remove_all(Geneset,pattern="Reyf_Clus1_w_o_")) %>% ggplot(aes(fct_reorder(Geneset,avg_score_diff),avg_score_diff))+ geom_col()+theme(axis.text.x=element_text(angle = 90))  +coord_flip()
 # reyf_clus1_loo_corr
 
-scores_loo_corr <- read_rds("data/scores_loo_corr.rds")
+scores_loo_corr <- read_rds("C:/Users/danne/R_projects/manteltext_git/data/scores_loo_corr.rds")
 
 # #calculate mean score
 # donor_clus_avg_scores_reyf_clus1_loo_corr <- scores_reyf_clus1_loo_corr %>%  mutate(
