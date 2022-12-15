@@ -1,0 +1,283 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+library(DESeq2)
+library(Seurat)
+library("textTinyR")
+library(tidyverse)
+library(ggrepel)
+
+```
+
+
+```{r function}
+
+make_idents_counts <- function(
+    ds,
+    idents_choose="seurat_clusters",
+    assay_="RNA",
+    min_cell_num=200,
+    keep=NULL,
+    perc_expressed=10){
+        slot_ <- "counts"
+        Idents(ds) <- idents_choose
+        group_names <- unique(Idents(ds))
+        if (!is.null(keep)) {group_names <- keep
+          
+        }
+        reads <- slot(ds, "assays")[[assay_]] %>% slot(slot_)
+        #get rid of false genes / . in there name
+        reads <- reads[rownames(reads) %>% str_subset(pattern = "[.]",negate = T),]
+        #cut out genes with less then perc_expressed percent of cells that eypress the gene
+        i_cells <- WhichCells(seurat_monocytes, idents = keep)
+        
+        reads_group <- reads[,i_cells]
+        
+        reads <- reads[(((reads_group > 1) %>% rowSums())> (length(i_cells)/100*perc_expressed)),]
+        print(paste0(as.character(nrow(reads))," genes kept"))
+        sum_counts_ds <- tibble(.rows =  nrow(reads))
+        #z=1
+        for (i in seq_along(group_names)) {
+          print(i)
+          #print(colnames(sum_counts_ds))
+          print(group_names[i])
+          i_cells <- WhichCells(object =ds,idents = group_names[i])
+          if (length(i_cells)<min_cell_num) {
+            sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=0)
+          colnames(sum_counts_ds)[i] <- paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num))
+
+          next}
+          #i_cells <- WhichCells(object =ds,idents = "hla_d_rlo_s100a_monocytes_C19-CB-0003")
+          reads_group <- reads[,i_cells] %>%  sparse_Sums(rowSums=T)
+          
+          sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=reads_group)
+          colnames(sum_counts_ds)[i] <- as.character(group_names[i])
+          #print(as.character(colnames(sum_counts_ds)[i]))
+          
+        }
+        
+        sum_counts_ds <- sum_counts_ds %>%  mutate(gene=rownames(reads)) %>% relocate(gene)
+        return(sum_counts_ds)
+}
+
+```
+
+
+
+```{r}
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- ".\\output\\"
+```
+
+```{r}
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+
+seurat_monocytes$cluster_donor_experiment_sex <- paste0(seurat_monocytes$cluster_clean, "__",
+                                                        seurat_monocytes$donor, "__",
+                                                        seurat_monocytes$experiment,"__",
+                                                        seurat_monocytes$sex)
+Idents(seurat_monocytes) <- "cluster_donor_experiment_sex"
+```
+
+```{r}
+seurat_monocytes %>% FeaturePlot(features = "HBB")
+seurat_monocytes %>% FeaturePlot(features = "IGHA1")
+reads <- (slot(seurat_monocytes, "assays")[["RNA"]] %>% slot("counts"))
+
+perc_hbb_vec <- vector()
+for (i in 0:30) {
+  perc_hbb_vec[i] <- sum(reads["HBB",]>i)/ncol(reads)
+}
+
+perc_hbb <- perc_hbb_vec %>% tibble(perc_hbb=.,more_than_n_reads=0:29) %>% ggplot(aes(x=more_than_n_reads, y=perc_hbb)) +geom_col()+ggtitle("% HBB")
+
+perc_igha1_vec <- vector()
+
+for (i in 0:30) {
+  perc_igha1_vec[i] <- sum(reads["IGHA1",]>i)/ncol(reads)
+}
+perc_igha1 <-tibble(perc_igha1=perc_igha1_vec,more_than_n_reads=0:29) %>% ggplot(aes(x=more_than_n_reads, y=perc_igha1)) +geom_col()+ggtitle("% IGHA1")
+
+
+perc_igkc_vec <- vector()
+
+for (i in 0:30) {
+  perc_igkc_vec[i] <- sum(reads["IGKC",]>i)/ncol(reads)
+}
+perc_igkc <-tibble(perc_igkc=perc_igkc_vec,more_than_n_reads=0:29) %>% ggplot(aes(x=more_than_n_reads, y=perc_igkc)) +geom_col()+ggtitle("% IGKC")
+
+perc_igkc
+perc_hbb
+perc_igha1
+FeatureScatter(seurat_monocytes, feature1 = "HBB", feature2 = "IGHA1")+NoLegend()
+```
+```{r}
+seurat_monocytes%>% FeaturePlot(features = "IGHA1", slot = "counts")
+```
+
+```{r}
+
+
+seurat_monocytes <- subset(x = seurat_monocytes, subset = IGHA1 <3, slot="counts")
+seurat_monocytes <- subset(x = seurat_monocytes, subset = IGKC <12, slot="counts")
+
+seurat_monocytes<- subset(x = seurat_monocytes, subset = HBB<12, slot="counts")
+
+
+n_tbl <- tibble(cluster=seurat_monocytes$cluster_clean, 
+               donor=seurat_monocytes$donor, 
+               experiment=seurat_monocytes$experiment,
+               sex=seurat_monocytes$sex,
+               condition=seurat_monocytes$group_per_sample) %>%
+  group_by(cluster,donor,experiment,sex, condition) %>% 
+  summarise(n=n()) %>%  mutate(keep=paste0(cluster,"__",
+                     donor,"__",
+                     experiment,"__",
+                     sex
+                     )) %>% 
+  filter( condition %in% c("mild","severe"#,"control"
+                                                 ),
+          cluster %in% c("hla_d_rhi_cd83_monocytes","hla_d_rlo_s100a_monocytes" )) %>% 
+  ungroup()
+
+
+
+n_tbl %>%mutate(keep=fct_reorder(keep,n)) %>% ggplot(aes(keep,n))+geom_col(aes(fill=condition)) +theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+n_tbl %>% arrange(n)
+keep_tbl <- n_tbl  %>% filter(n>295)
+keep <- keep_tbl %>% pull(keep)
+
+
+```
+
+```{r}
+# n_tbl %>% filter(cluster=="hla_d_rlo_s100a_monocytes", experiment=="B3B4", sex=="male")
+# #filter out this cluster because of pca #"pca_experiment_sex_cell_type.tiff"
+# keep <- n_tbl %>% filter(cluster!="hla_d_rlo_s100a_monocytes" | experiment!="B3B4"| sex!="male") %>% pull(keep)
+# #keep%>% filter(cluster=="hla_d_rlo_s100a_monocytes", experiment=="B3B4", sex=="male")
+
+```
+
+
+```{r}
+ds_monocytes <-  make_idents_counts(seurat_monocytes, idents_choose = "cluster_donor_experiment_sex", min_cell_num = 295,keep = keep,perc_expressed=5 )
+#ds_monocytes %>% write_rds( paste0(path_output_file,"bulk_sums_monocytes.rds") )
+# ds_monocytes %>% select(!(contains("_smaller")))  %>% colnames()
+# ds_monocytes %>% select(contains("_smaller")) %>% colnames()
+
+
+# ds_monocytes %>% 
+#   pivot_longer(cols = `cd163hi_monocytes_1_d7__C19-CB-0001__B3B4__male`:`hla_d_rlo_s100a_monocytes__C19-CB-0021__B6B7__male`, names_to = "cluster_donor_sex") %>% 
+#   group_by(gene) %>% summarise(n=)
+```
+
+```{r}
+x <- ds_monocytes %>% select(!(contains("_smaller"))) %>% ungroup()
+expression_matrix <- as.matrix(x %>% select(-gene)) 
+rownames(expression_matrix) <- x %>% pull(gene)
+```
+
+
+```{r}
+design_x <-colnames(expression_matrix)%>% 
+  tibble(dings=.) %>% separate(col= dings,into = c("cell_type","donor","experiment","sex"),sep = "__") %>%mutate_all(as_factor)
+design_x
+reihenfolge <- paste0(design_x$cell_type,"__", design_x$donor, "__",design_x$experiment, "__",design_x$sex)
+expression_matrix <- expression_matrix[,reihenfolge]
+
+```
+
+
+
+```{r}
+
+clusters <- unique(design_x$cell_type)
+clusters <- c("hla_d_rhi_cd83_monocytes", "hla_d_rlo_s100a_monocytes")
+
+
+design_cluster <- design_x  %>% select(cell_type, -donor,experiment,sex)
+print(design_cluster)
+res<- DESeqDataSetFromMatrix(expression_matrix,
+                            colData=design_cluster,
+                            design= ~ 
+                              experiment+
+                              sex +
+                              cell_type) %>% DESeq()
+
+
+
+
+
+resultsNames(res)
+
+vsd <- vst(res, blind=FALSE)
+plotPCA(object=vsd, intgroup=c("experiment", "sex", "cell_type"))
+#ggsave("pca_experiment_sex_cell_type.tiff")
+
+#write_rds(res_list, paste0(path_output_file,"deseq_monocytes_results_list_cluster_sex.rds"))
+```
+
+```{r}
+results_hla_d_rlo_s100a_monocytes <- results(res)%>% as_tibble(rownames = "gene")
+
+
+
+
+results_hla_d_rlo_s100a_monocytes %>% filter(log2FoldChange>1) %>% arrange(pvalue)
+
+results_hla_d_rlo_s100a_monocytes %>% filter(log2FoldChange<1) %>% arrange(pvalue)
+
+
+results_hla_d_rlo_s100a_monocytes  %>% arrange(log2FoldChange)
+
+
+
+```
+
+
+
+```{r}
+
+results_hla_d_rlo_s100a_monocytes%>% 
+  mutate(highlight=ifelse(gene %in% c("S100A9","S100A12","CCL3", "NR4A2", "TAGAP", "CD83", "RAB13"), "sig", NA))%>%
+  ggplot(aes(log2FoldChange, -log(padj))) + 
+  geom_point(aes(color=highlight))+ 
+  ggtitle("res_hla_d_rlo_s100a_monocytes")
+
+```
+```{r}
+results_hla_d_rlo_s100a_monocytes%>% arrange(-log2FoldChange)%>% ggplot(aes(log(baseMean), -log(padj))) + geom_point()+ggtitle("res_hla_d_rlo_s100a_monocytes")
+results_hla_d_rlo_s100a_monocytes%>% ggplot(aes(pvalue)) + geom_histogram(bins = 500)+ggtitle("res_hla_d_rlo_s100a_monocytes")
+
+results_hla_d_rlo_s100a_monocytes
+
+```
+```{r}
+resNorm <- lfcShrink(res, coef=2, type="normal")
+#resAsh <- lfcShrink(res, coef=2, type="ashr")
+par(mfrow=c(1,3), mar=c(4,4,2,1))
+xlim <- c(1,1e5); ylim <- c(-3,3)
+#plotMA(resLFC, xlim=xlim, ylim=ylim, main="apeglm")
+plotMA(resNorm, xlim=xlim, ylim=ylim, main="normal")
+#plotMA(resAsh, xlim=xlim, ylim=ylim, main="ashr")
+```
+
+```{r}
+resNorm %>% as_tibble(rownames = "gene")%>%   mutate(highlight=ifelse(gene %in% c("S100A9", "CCL3", "NR4A2", "TAGAP"), "sig", NA))%>%
+  ggplot(aes(log2FoldChange, -log(padj))) + 
+  geom_point(aes(color=highlight))+ 
+  ggtitle("res_hla_d_rlo_s100a_monocytes")
+
+
+resNorm %>% as_tibble(rownames = "gene") %>% arrange(log2FoldChange)
+resNorm %>% as_tibble(rownames = "gene") %>% arrange(-log2FoldChange)
+
+```
+
