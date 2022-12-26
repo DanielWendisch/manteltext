@@ -2,7 +2,7 @@
 title: "R Notebook"
 output: html_notebook
 ---
-```{r}
+```{r warning=FALSE}
 library(patchwork)
 library(cowplot)
 library(tidyverse)
@@ -22,6 +22,66 @@ size_ <- 6
 ```
 
 ```{r}
+#function that reads scsconda output files and binds them into one tibble
+make_df <- function(rel_path_folder="..\\python\\", pattern="mild_vs_control.csv"){
+  files_names<- list.files(rel_path_folder) %>% str_subset(pattern) %>% paste0(rel_path_folder,.)
+  files_names%>%
+  #create alist of tibbles of the scConda results
+  map(read_csv) %>%
+  #add a column to each tibble with the comparison of the table
+  map2(files_names,~mutate(.x, comparison=.y)) %>% 
+  #merge all into one dataframe
+  map_df(~bind_rows(.x))
+  }
+
+theme_2 <- theme(legend.position = "none",
+                                                                                                                                       panel.grid.major.x=element_line(size=1, color = "black"),
+                                                                                                                                       panel.grid.minor.x=element_line(size=0.6, color = "black"))
+
+theme_2_main <- theme(legend.position = "none",
+                                                                                                                                       panel.grid.major.x=element_line(size=1, color = "black"),
+                                                                                                                                       panel.grid.minor.x=element_line(size=0.6, color = "black"),
+                axis.text.y=element_blank(),
+                axis.title.y = element_blank(),
+                axis.ticks.y = element_blank()
+                )
+
+monocyte_names <- rev(c("Classical_Monocytes", "non_Classical_Monocytes", "HLA_DRhi_CD83_Monocytes", "HLA_DRlo_s100a_Monocytes"))
+shorten_df <- . %>%   clean_names %>% 
+  filter(cell_type %in% monocyte_names) %>% 
+  mutate(cell_type=factor(cell_type, levels =monocyte_names ))
+
+p_sccoda_1 <- make_df(pattern="mild_vs_control.csv") %>% 
+  shorten_df %>% 
+  ggplot(aes(y=cell_type))+
+  geom_segment(aes(yend=cell_type,  x=hdi_3_percent, xend=hdi_97_percent, color=comparison),alpha=0.3, size=4)+
+  theme_minimal()+theme(legend.position = "none")+ theme_2+
+  ggtitle("mild_vs_control.csv")
+
+p_sccoda_2 <- make_df(pattern="severe_vs_control.csv") %>% 
+  shorten_df() %>% 
+  ggplot(aes(y=cell_type))+
+  geom_segment(aes(yend=cell_type,  x=hdi_3_percent, xend=hdi_97_percent, color=comparison),alpha=0.3, size=4)+
+  theme_minimal()+theme(legend.position = "none")+ theme_2_main+ggtitle("severe_vs_control")
+
+p_sccoda_3 <- make_df(pattern="severe_vs_mild.csv") %>% 
+  shorten_df() %>% 
+  ggplot(aes(y=cell_type))+
+  geom_segment(aes(yend=cell_type,  x=hdi_3_percent, xend=hdi_97_percent, color=comparison),alpha=0.3, size=4)+
+  theme_minimal()+theme(legend.position = "none")+ theme_2_main+ggtitle("severe_vs_mild") 
+
+
+p_sccoda_1+p_sccoda_2+p_sccoda_3+plot_layout(heights=c(0.3), widths = c(1,1,1),)
+```
+
+
+
+```{r}
+AM1_vs_AM2_markers <- BAL_macrophages %>% FindMarkers(ident.1 = "AM1", ident.2 = "AM2") %>% as_tibble(rownames = "ensg") %>% mutate(genes=genifiy_2(ensg))
+AM1_vs_AM2_markers %>% arrange(-avg_log2FC)
+```
+
+```{r warning=FALSE}
 
 umap_plot <- DimPlot(BAL_macrophages )
 
@@ -30,12 +90,15 @@ umap_plot <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_poi
 umap_plot
 markers_cluster_tbl <-  read_rds("../data/markers_cluster_tbl.rds")
 manuallly_sel_2groups <- c("ITGAM", "CD14", "CCR1", "CSF1R","FABP4","INHBA","FFAR4",  "PPARG", "PCOLCE2")
+
 top_markers_cluster <- markers_cluster_tbl %>% mutate(clus=factor(clus, levels = cluster_names))%>%group_by(clus) %>% slice_max(summary.AUC,n= 5)%>% arrange(.by_group = ) %>%  pull(gene) %>% unique()
 dot_plot <- dot_plot_cluster(unique(c(manuallly_sel_2groups, top_markers_cluster)))+theme(legend.position = "none", axis.text.x = element_text(size_),axis.text.y = element_text(size_))
 a1 <- umap_plot + dot_plot+plot_annotation(tag_levels = 'A') & 
   theme(plot.tag = element_text(size = 8))
 
 a1
+
+ggsave2(plot = umap_plot,filename = "../output/BAL_umap.tiff")
 ```
 ```{r}
  umap_plot$data %>% mutate(na=rep(c(NA,NA,NA,1),nrow(umap_plot$data)/4)) %>% mutate(umap_red=UMAP_1*na,umap_red=UMAP_2*na)
@@ -53,6 +116,11 @@ a1
   theme(legend.position = "none")  +theme_2 +  
     ggplot2::scale_color_manual(values = color.cluster)+xlim(-10,8)+ylim(-5,5)
   umap_dens
+  
+  
+
+  
+ # ggsave(dpi=800, "umap_dens.tiff")
 ```
 
 
@@ -61,7 +129,7 @@ x_lim_pc_and_loadings <- c(-0.5,0.33)#
 y_lim_pc_and_loadings <- c(-0.4,0.15)
 text_size <- function(size_=6){
   theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
-
+  
 }
 
 
@@ -77,12 +145,21 @@ pc1_pc2 <- pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_point(aes(a
   theme(legend.position = "none")  +theme_2 + xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)+
   ggplot2::scale_color_manual(values = color.cluster)
 
+
 pc1_pc2_titeled <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_point(aes(alpha=0.2))+# xlim(x_lim_pc_and_loadings) + ylim(y_lim_pc_and_loadings) + 
   theme(legend.position = "none")  +theme_2_titeled + xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)+
   ggplot2::scale_color_manual(values = color.cluster)+ggtitle("PC1 vs. PC2")
 
 
 
+pc1_pc2_dens <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+  geom_density_2d(bins=200, linejoin = "bevel")+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)+ggtitle("PC1 vs. PC2")
+
+
+umap_dens <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "round")+
+  theme(legend.position = "none")  +theme_2 +  
+  ggplot2::scale_color_manual(values = color.cluster)+xlim(-10,8)+ylim(-5,5)
+umap_dens
 
 # pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
 #   APOC1_pc1+ plot_spacer()+plot_spacer()+ plot_spacer()+
@@ -96,6 +173,10 @@ pc1_pc2_titeled <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_po
 #   
 # nual(values = color.cluster)+ggtitle("PC3 vs. PC4")
 # pc3_pc4_titeled_dens
+
+pc1_pc2
+
+
 ```
 
 
@@ -126,12 +207,15 @@ hclust_BAL <- my_hclust_BuildCLusterTree(BAL_macrophages, assay = "RNA")
 clust_dendro <- ggdendrogram(hclust_BAL)+theme(axis.text.x =element_text(size = size_),
                                                axis.text.y =element_blank(),
                                                title = element_blank())
+
+ggsave("dendro.eps")
 ###########
-pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
+p_pca <- pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
   APOC1_pc1+ plot_spacer()+plot_spacer()+ plot_spacer()+
   HLA_d_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+
-  S100A8_pca_1+ plot_spacer()+plot_spacer()+clust_dendro+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))
-
+  S100A8_pca_1+ #plot_spacer()+plot_spacer()+
+  clust_dendro+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))
+p_pca + scale_y_reverse()
 
 PC_1_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_1)  %>% mutate(pc_squared=((PC_1)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_1<0,"negative", "positive"), gene= fct_reorder(gene,PC_1)) %>% arrange(PC_1) %>% ggplot(aes(PC_1, gene,color=PC_1)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_1, y=gene,yend=gene), size=1)+theme_bw() +
   scale_color_distiller(
@@ -142,7 +226,7 @@ PC_2_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% a
   scale_color_distiller(palette = "RdYlBu", direction = -1)+
   theme(legend.position = "none", axis.title = element_blank())
 
-x <- PC_1_lollypop+
+  x <- PC_1_lollypop+
   PC_2_lollypop+
   wrap_elements(clust_dendro&  theme(text = element_text(size = size_), axis.text =element_text(size = size_) ))+
   plot_layout(guides = "collect", widths = c(1), heights = c(6))&  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
@@ -197,7 +281,38 @@ a3 <-
 
 
 a3
-ggsave("../output/BAL_comp.tiff",units = "cm")
+#ggsave("../output/BAL_comp.tiff",units = "cm")
+```
+```{r}
+ (pc1_pc2_titeled+scale_y_reverse()+scale_x_reverse())+
+  (CD163_pc2+scale_x_reverse())+
+  (LGMN_pc2+scale_x_reverse())+
+  (LYZ_pc2+scale_x_reverse()) +
+  (APOC1_pc1+scale_x_reverse())+ 
+  plot_spacer()+
+plot_spacer()+
+  plot_spacer()+
+  (HLA_d_pca_1+scale_x_reverse())+ 
+  plot_spacer()+
+  plot_spacer()+
+  plot_spacer()+
+  (S100A8_pca_1+scale_x_reverse())+ #plot_spacer()+plot_spacer()+
+  plot_spacer()+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))&  
+  theme(axis.text.y  =element_text(size = 18),
+        axis.text.x  =element_text(size = 18),
+        title=element_text(size = 18) )
+
+ggsave2("../output/pc1_pc2_proj_loadings_switched.tiff", width = 34, height = 19, units = "cm")
+```
+
+```{r}
+y1 <- PC_1_lollypop+
+  PC_2_lollypop  + plot_annotation(tag_levels = 'A') &  
+  theme(text = element_text(size = 24),
+        axis.text.y  =element_text(size = 24),
+        axis.text.x  =element_text(size = 24))
+y1
+ggsave("lollypop.eps")
 ```
 
 ```{r}
@@ -262,7 +377,7 @@ dat <- BAL_macrophages@reductions$pca@cell.embeddings[,dims_sel] %>% as_tibble(r
 PC_2_top_loaded <- dat %>%
   pivot_longer(cols = CD163:LGMN, values_to = "value")%>%
   group_by(name) %>% mutate(scaled_value=scale(value)) %>% mutate(value=value*-1)  %>% 
-  ggplot(aes(PC_2,value))+geom_smooth(aes(color=name))+coord_flip()+theme_2 + xlim(c(y_lim_pc_and_loadings))
+  ggplot(aes(PC_2,value))+geom_smooth(aes(color=name))+coord_flip()+theme_2 + xlim(c(y_lim_pc_and_loadings))+ scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07"))
 
 ### PC1 loadings
 
@@ -281,16 +396,25 @@ dat <- BAL_macrophages@reductions$pca@cell.embeddings[,dims_sel] %>% as_tibble(r
 PC_1_top_loaded <- dat %>%
   pivot_longer(cols = S100A8:HLA_d, values_to = "value") %>%
   group_by(name) %>% mutate(scaled_value=scale(value))  %>% 
-  ggplot(aes(PC_1,scaled_value))+geom_smooth(aes(color=name))+theme_2 + xlim(x_lim_pc_and_loadings)
+  ggplot(aes(PC_1,scaled_value))+geom_smooth(aes(color=name))+theme_2 + xlim(x_lim_pc_and_loadings)+ scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07"))
 
 ######
-pc1_pc2+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3, 0.5), heights = c(3,0.5),guides = 'collect')
+y2 <- pc1_pc2+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3, 0.5), heights = c(3,0.5),guides = 'collect')
 
 
+y3 <- pc1_pc2_dens+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3, 0.5), heights = c(3,0.5),guides = 'collect')
+y2
+y3
+ggsave("pc1_loaded.eps")
+
+
+pc1_pc2
+
+ggsave("pc1_pc2.tiff", dpi=800)
 ```
 
 ```{r}
-
+source("fibrosis_datasets_effect_size_calc.R")
 
 umap_a_ipf <- module_score_one_umap(object = BAL_macrophages,pattern = "Ayau_IPFeMp_score_fibrosis" )#+ggtitle("Ayau_IPFeMp_score_fibrosis")
 
@@ -308,8 +432,9 @@ heatmap_effsize <- dat%>%
         axis.title.y = element_blank(),
         axis.title.x = element_text("gene set"))+ 
   xlab("gene set")
-
+heatmap_effsize
 top_2 <- umap_a_ipf+plot_spacer()+heatmap_effsize
+top_2
 ```
 
 #
@@ -422,7 +547,63 @@ comp_plot
 
 top_2/ fib_dotplot
 ```
+Grouping by clustering aids understanding of multidimensional data, even if segregation is rather gradual than discrete as in the BAL macrophage dataset. The granularity of of neighrest neighbor and centroid based method is however dependant on partially arbitrary set points and does not necessarily reflect a degree of segregation. Especially since the oversymplified M1/M2 classification caused a widespread belief that macrophages functions were bipolar and non-ovrlapping here I want to append a Principle Component Analysis (PCA) to account for the graded changes in the data set. It becomes apparent that the underlying three pole architecture of the UMAP that encompasses information of the top 15 PCs, is already present in the first 2 of 15 PCs(Fig A). It can therefore be stated that the remaining PCs are predominantly representative of subgroupings of AM and possess little other information in concern to cell type separation  of FN-1-Mono, AM and LGMN/CD163 Macrophages.
+Strikingly, among the top gene loadings of PC1 were several HLA type II related genes (HLA-D* genes, HLA-DR Gamma Chain (CD74),and the tetraspanin CD81). Negatively associated are markers now typically used for the identification of monocytes in scRNA-seq studies (S100A8/9/12, FCN, VCN). This suggest that this PC1 is representative of the differentiation of monocytes to macrophages which enlarge have higher  antigen presentation capacities  (Iwasaki and Medzhitov 2015). Hence the largest variance in this dataset is constituted by the difference of a monocytic to an alveolar macrophage differentiation. Situated closer to AM on this axis CD163/LGMN macrophages could therefore be viewed to have some typical alveolar macrophage functionionality and additionally functionality described by PC2
+Additionally to proproliferative genes PC2 was strongly associated with cathepsis (CTSL, CTSB, CTSD), endopeptidases integral in lysosomal antigen procession for MHC2 presentation but as well likely involved in extracellular matrix remodeling QUOTE. PC2 is negatively associated with the expression of the antibacterial peptidoglycan cleaving Lysozym. 
+Since the only two known origins of alveolar macrophages are either replenishment from a tissue pool or through haematopoiesis and an accumulation of monocytic markers by macrophages is not known we view CD163/LGMN-macrophages to be of likely recent monocytic origin due to their genespace proximity to monocytes as well as higher expression of monocytic markers such as CD14 then cAMs. 
+AM clusters may be recently tissue derived due to their proximity to mitotically active AMs, however a recent haematopoietic origin can not be excluded.
+
+
+
 ```{r}
+avg_exp <- AverageExpression(object = BAL_macrophages,group.by = "Cluster"#, add.ident = "patient"
+                             )
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>%
+  mutate(gene=genifiy_2(gene)) %>% slice_max(Monocytes, n=500) %>% 
+  mutate(is_s100a8= if_else(gene=="S100A8","S100A8", "rest")) %>% 
+  ggplot(aes(fct_reorder(gene, -Monocytes),Monocytes, color=is_s100a8))+ geom_col()
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
+  mutate(gene=genifiy_2(gene)) %>% 
+  mutate(rank_from_top_monocytes=nrow(.)-rank(Monocytes)) %>% 
+  mutate(rank_from_top_CD163LGMNM=nrow(.)-rank(CD163LGMNM)) %>%
+  mutate(rank_from_top_MonoM=nrow(.)-rank(MonoM)) %>% 
+    mutate(rank_from_top_AM1=nrow(.)-rank(AM1)) %>% 
+  filter(gene %in% c("FTL",
+                     "S100A8",
+                     "S100A9",
+                     "S100A12", 
+                     "APOC1",
+                     "APOE"))
+
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>%  
+ mutate_if(is.numeric, round, digits=3) %>% 
+  mutate(gene=genifiy_2(gene)) %>% 
+  arrange(desc(AM2))
+
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
+   mutate_if(is.numeric, round, digits=3) %>% 
+  mutate(gene=genifiy_2(gene)) %>% 
+  arrange(desc(CD163LGMNM))
+
+
+
+rownames(
+  avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
+     mutate_if(is.numeric, round, digits=3) %>% 
+  mutate(gene=genifiy_2(gene))
+) %>% unique() %>% length()
+```
+
+```{r}
+VlnPlot(mono, features= "nCount_SCoV2", group.by = "condition")
+FeaturePlot(mono, features= "nCount_SCoV2", max.cutoff = "q90")
+
+VlnPlot(mono, features= ensemblizer_2("LGMN"), group.by = "condition", slot = "counts")
+FeaturePlot(mono, features= ensemblizer_2("NRP1"))
 
 
 ```

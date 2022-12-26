@@ -1,0 +1,70 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+"..\\output\\meta_data_condition_per_sample_donor_day.csv"
+"..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv"
+"control"
+"mild"
+getwd()
+file.choose()
+```
+
+```{bash}
+Rscript scripts\\cell_counts_per_group_schulte_schrepping_cohort_1.R
+```
+
+
+```{bash}
+python ..\\python\\sccoda_functionalized.txt "..\\output\\meta_data_condition_per_sample_donor_day.csv" "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv" "control" "severe" ""
+
+python ..\\python\\sccoda_functionalized.txt "..\\output\\meta_data_condition_per_sample_donor_day.csv" "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv" "control" "mild" ""
+
+python ..\\python\\sccoda_functionalized.txt "..\\output\\meta_data_condition_per_sample_donor_day.csv" "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv" "mild" "severe" ""
+
+python ..\\python\\sccoda_functionalized.txt "..\\output\\meta_data_condition_per_sample_donor_day_monocytes_as_one.csv" "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv" "control" "severe" "_monocytes_as_one"
+
+python ..\\python\\sccoda_functionalized.txt "..\\output\\meta_data_condition_per_sample_donor_day_monocytes_as_one.csv" "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv" "control" "mild" "_monocytes_as_one"
+
+
+python ..\\python\\sccoda_functionalized.txt "..\\output\\meta_data_condition_per_sample_donor_day_monocytes_as_one.csv" "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv" "mild" "severe" "_monocytes_as_one"
+```
+
+
+#change rel_path_folder to "..\\output\\python\\"
+cell type + "_"
+```{r}
+#function that reads scsconda output files and binds them into one tibble
+make_df <- function(rel_path_folder="..\\python\\", pattern="mild_vs_control.csv"){
+  files_names<- list.files(rel_path_folder) %>% str_subset(pattern) %>% paste0(rel_path_folder,.)
+  files_names%>%
+  #create alist of tibbles of the scConda results
+  map(read_csv) %>%
+  #add a column to each tibble with the comparison of the table
+  map2(files_names,~mutate(.x, comparison=.y)) %>% 
+  #merge all into one dataframe
+  map_df(~bind_rows(.x))
+  
+}
+
+#pipe function that summaries the aggregated scCoda tibble into how many of the comparisons were up or downregulated
+sum_up_down <- . %>% 
+  clean_names() %>%
+  select(covariate,cell_type,final_parameter) %>% 
+  mutate(up=ifelse(final_parameter>0,1,0),
+         down=ifelse(final_parameter<0,1,0)) %>% 
+  group_by(cell_type) %>% 
+  summarise(sum_up=sum(up), sum_down=sum(down)) %>% 
+  mutate(sum_down=-sum_down) %>% 
+  #long format for plotting
+  pivot_longer(cols = sum_up:sum_down,names_to = "up_down") %>%
+  #actually this is not needed as no there are no cellt ypes that have both  negative and positive entries
+  #however 0 values are duplicated and will over plot the other values, removed later
+  #filter(up_down!="sum_up" | value!=0) %>% 
+  #factor for non-continous scale for plotting
+  mutate(majority=ifelse(abs(value)>6,"majority","minority"),value= factor(value,levels =c(-13:13) ))
+```
+

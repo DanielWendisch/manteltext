@@ -1,0 +1,35 @@
+import sys
+import importlib
+import warnings
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+import pickle as pkl
+import matplotlib.pyplot as plt
+
+from sccoda.util import comp_ana as mod
+from sccoda.util import cell_composition_data as dat
+from sccoda.util import data_visualization as viz
+from sccoda.util import comp_ana as mod
+import sccoda.datasets as scd 
+
+def main(dat_csv= "..\\output\\meta_data_condition_per_sample_donor_day.csv",grouping_csv="..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv",name_group_1="control",name_group_2="mild", name_extension=""):
+  cell_counts =pd.read_csv(filepath_or_buffer= dat_csv)
+  data_grouping=pd.read_csv(filepath_or_buffer= grouping_csv)
+  
+  data_all = dat.from_pandas(cell_counts, covariate_columns=["sample"])
+  data_all.obs=data_grouping 
+  
+  ####################
+  data=data_all[((data_all.obs.condition==name_group_1) | (data_all.obs.condition==name_group_2))]
+  	
+  cell_types = data.var.index
+  for ct in cell_types:
+                  print(f"Reference: {ct}")
+                  model_temp = mod.CompositionalAnalysis(data, formula="condition", reference_cell_type=ct)
+                  temp_results = model_temp.sample_hmc(num_results=20000)#20000
+                  # Select credible effects#
+                  temp_results.effect_df.to_csv("..\\output\\python\\"+ct+"_"+name_group_1+"_vs_"+name_group_2+name_extension+".csv")
+                
+                
+main(dat_csv=sys.argv[1],grouping_csv=sys.argv[2],name_group_1=sys.argv[3],name_group_2=sys.argv[4], name_extension=sys.argv[5])
