@@ -1,0 +1,328 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(Seurat)
+library(janitor)
+library(future)
+library(rcartocolor)
+```
+```{r}
+plan()
+
+```
+```{r}
+plan('multisession', workers = 4)
+#plan("sequential", workers = 4)
+plan()
+```
+
+
+```{r}
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- ".\\output\\"
+seurat_c1_full_FG <- readRDS("C:/Users/danne/raw_data/schulte_schrepping_et_al/seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds")
+Idents(seurat_c1_full_FG) <- "RNA_snn_res.0.4"
+```
+
+```{r}
+new_cluster_names<-
+  c(
+  `0`="Classical Monocytes",
+  `7`="HLA DRhi CD83 Monocytes",
+  `12`="CD163hi Monocytes 1_d7",
+  `6`="HLA DRlo S100A Monocytes",
+  `8`="Non classical Monocytes",
+  `11`="Neutrophils",  
+  `13`="Immature Neutrophils",
+  `17`="mDCs",
+  `18`="pDCs",
+  `1`="CD4 T",
+  `3`="CD4 T",
+  `10`="CD4 T",
+  `2`="CD8 T",
+  `15`="CD8 T",
+  `9`="CD8 T",
+  `4`="NK",
+  `5`="B",
+  `19`="B",
+  `20`="B",
+  `16`="Plasmablasts",
+  `14`="Megakaryocyte",
+  `21`="mixed",
+  `22`="undefined"
+)
+#make converter named vector
+new_cluster_names_clean <- make_clean_names(new_cluster_names)
+names(new_cluster_names_clean) <- names(new_cluster_names)
+#create new metadata variable for cluster names
+seurat_c1_full_FG$cluster_clean <- new_cluster_names_clean[seurat_c1_full_FG$RNA_snn_res.0.4 |> as.character()]
+
+```
+
+```{r}
+meta_data_all <- tibble(cluster=seurat_c1_full_FG$cluster_clean,
+       donor=seurat_c1_full_FG$donor,
+       purification= seurat_c1_full_FG$purification,
+       condition_per_sample=seurat_c1_full_FG$group_per_sample,
+       days_post_symptom_onset=seurat_c1_full_FG$days_after_onset,
+       disease_stage=seurat_c1_full_FG$disease_stage)
+
+meta_data_donor_day <- meta_data_all %>%
+  mutate(donor_day=paste0(donor,"__",days_post_symptom_onset)) %>% 
+  group_by(cluster,donor_day) %>% 
+  summarise(n=n())%>% 
+  pivot_wider(names_from = "cluster",values_from = n) %>% ungroup()
+
+meta_data_condition_per_sample_donor_day <- meta_data_all %>%
+  mutate(condition_per_sample_donor_day=paste0(group_per_sample,"__0_",donor, "_",days_post_symptom_onset)) %>% 
+  group_by(cluster,condition_per_sample_donor_day) %>% 
+  summarise(n=n())%>% 
+  pivot_wider(names_from = "cluster",values_from = n) %>% ungroup() %>% replace(is.na(.), 0) %>% rename(sample=condition_per_sample_donor_day)
+
+meta_data_condition_per_sample_donor_day
+
+meta_data_condition_per_sample_donor_day_grouping <- meta_data_condition_per_sample_donor_day %>% 
+  select(condition_per_sample_donor_day) %>% 
+  separate(col=condition_per_sample_donor_day, sep="__", into = c("condition","donor_day"),remove = FALSE) %>% 
+  select(condition_per_sample_donor_day,condition) %>% rename(sample=condition_per_sample_donor_day)
+
+meta_data_all_n %>% write_csv(paste0(path_output_file,"meta_data_all_n.csv"))
+meta_data_groups %>% write_csv(paste0(path_output_file,"meta_data_groups.csv"))
+
+meta_data_condition_per_sample_donor_day %>% write_csv(paste0(path_output_file,"meta_data_condition_per_sample_donor_day.csv"))
+meta_data_condition_per_sample_donor_day_grouping %>% write_csv(paste0(path_output_file,"meta_data_condition_per_sample_donor_day_grouping.csv"))
+```
+```{r}
+meta_data_all <- tibble(cluster=seurat_c1_full_FG$cluster_clean,
+       donor=seurat_c1_full_FG$donor,
+       purification= seurat_c1_full_FG$purification,
+       condition_per_sample=seurat_c1_full_FG$group_per_sample,
+       days_post_symptom_onset=seurat_c1_full_FG$days_after_onset,
+       disease_stage=seurat_c1_full_FG$disease_stage)
+
+
+meta_data_condition_per_sample_donor_day <- meta_data_all %>%
+  mutate(condition_per_sample_donor_day=paste0(group_per_sample,"__0_",donor, "_",days_post_symptom_onset)) %>% 
+  mutate(cluster=str_replace_all(cluster,
+ c( "cd8_t_3"="CD8_T_cells",
+    "cd8_t_2"="CD8_T_cells",
+    "cd8_t"="CD8_T_cells",
+    "m_d_cs"= "mDCs",
+    "cd4_t_3"="CD4_T_cells",
+    "cd4_t_2"="CD4_T_cells",
+    "cd4_t"="CD4_T_cells",
+    "b_3"="B_cells",
+    "b_2"="B_cells",
+    "plasmablasts"="B_cells",
+    "b"="B_cells",
+    "p_d_cs"="pDCs",
+    "hla_d_rhi_cd83_monocytes"="HLA_DRhi_CD83_Monocytes",
+    "classical_monocytes" ="Classical_Monocytes",
+    "cd163hi_monocytes_1_d7"="CD163hi_Monocytes_donor1_day1",
+    "non_classical_monocytes"="Non_classical_Monocytes",
+    "neutrophils" ="Neutrophils" ,
+    "hla_d_rlo_s100a_monocytes"="HLA_DRlo_s100a_Monocytes",
+    "megakaryocyte"="Megakaryocyte",
+    "nk"="NK"
+    
+    )
+  )) %>% 
+  group_by(cluster,condition_per_sample_donor_day) %>% 
+  summarise(n=n())%>% ungroup()  %>% 
+  pivot_wider(names_from = "cluster",values_from = n) %>% ungroup() %>% replace(is.na(.), 0) %>%
+  rename(sample=condition_per_sample_donor_day) %>% select(-mixed,-undefined)
+
+meta_data_condition_per_sample_donor_day
+
+meta_data_condition_per_sample_donor_day_grouping <- meta_data_condition_per_sample_donor_day %>% 
+  select(sample) %>% 
+  separate(col=sample, sep="__", into = c("condition","donor_day"),remove = FALSE) %>% 
+  select(sample,condition) 
+
+meta_data_condition_per_sample_donor_day %>% write_csv(paste0(path_output_file,"meta_data_condition_per_sample_donor_day.csv"))
+meta_data_condition_per_sample_donor_day_grouping %>% write_csv(paste0(path_output_file,"meta_data_condition_per_sample_donor_day_grouping.csv"))
+```
+
+
+
+#monocyte subset
+```{r}
+# seurat_monocytes <-subset(x = seurat_c1_full_FG, idents = c("0","6","7","12","8"#, "11"#,"17"
+# ))
+# seurat_monocytes |> write_rds(paste0(path_data_file,
+#                                      "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))                    
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+```
+
+```{r}
+genes_manual_select_1 <- c("HLA-DRA", 
+                           "HLA-DRB1",
+                         #"HLA-DRB3",
+                         #"HLA-DRB4",
+                         #"HLA-DRB5",#cannot be computed
+                         "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A12", "FCGR3A", "FCER1G","CX3CR1", "RNASE2", "KLF4", "CCR2", "CCR5", "SELL", "CD68", "ITGAX", "ITGAM","ITGAL", "CD163", "CD83","DDX5","S100A4", "CCNL1", "GPX1","CD14") #SELL="CD62L
+genes_manual_select_1 <- c("HLA-DRA", "HLA-DRB1",
+                         #"HLA-DRB3",
+                         #"HLA-DRB4",
+                         #"HLA-DRB5",#cannot be computed
+                         "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A12", "FCGR3A", "FCER1G","CX3CR1", "RNASE2", "KLF4", "CCR2", "CCR5", "SELL", "CD68", "ITGAX", "ITGAM","ITGAL", "CD163", "CD83","DDX5","S100A4", "CCNL1", "GPX1","CD14")
+
+
+
+genes_manual_select_2 <-c("MAVS","NOD2","KLF4","CIITA", "FCGR3A","CX3CR1","BATF3","CSF1","SDC4","CXCL3","CCL2")
+
+```
+
+```{r}
+Idents(seurat_monocytes) <- "cluster_clean"
+seurat_monocytes_markers <- read_rds(paste0(path_data_file, "seurat_monocytes_markers.rds") )
+#seurat_monocytes_markers<- FindAllMarkers(seurat_monocytes,max.cells.per.ident = 400)
+plan('sequential')
+additional_markers_mono<- FindAllMarkers(seurat_monocytes, features = genes_manual_select_1, logfc.threshold = 0,min.pct = 0, return.thresh = 1)
+#CD163_fc<- FindAllMarkers(seurat_monocytes, features = "CD163", logfc.threshold = 0,min.pct = 0, return.thresh = 1)
+#HLADRB5 <- - FindAllMarkers(seurat_monocytes, features = "HLA-DRB5", logfc.threshold = 0,min.pct = 0, return.thresh = 1)
+seurat_monocytes_markers_add <- seurat_monocytes_markers %>% as_tibble()%>%  bind_rows(as_tibble(additional_markers_mono)) %>% select(-p_val,-p_val_adj) %>% distinct(gene,cluster, .keep_all = T)
+#seurat_monocytes_markers %>% write_rds(paste0(path_output_file, "seurat_monocytes_markers_w_additional.rds"))
+
+seurat_monocytes_markers %>% filter(!(str_detect(gene, pattern = "RP")), avg_log2FC>0) %>% group_by(cluster) %>% slice_min(p_val_adj, n=30)
+
+```
+
+```{r}
+#seurat_monocytes_markers_add%>% 
+seurat_monocytes_markers %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% genes_manual_select) %>% 
+  mutate(gene=factor(gene, levels =genes_manual_select )) %>% 
+  # arrange(gene) %>% 
+  
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +theme_minimal()
+  
+seurat_monocytes_markers_add %>% 
+#seurat_monocytes_markers %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% genes_manual_select_1) %>% 
+  mutate(gene=factor(gene, levels =genes_manual_select_1 )) %>% 
+  # arrange(gene) %>% 
+  mutate(cluster=factor(cluster, levels =c("classical_monocytes",
+                                           "non_classical_monocytes",
+                                           "hla_dr_cd83_monocytes",
+                                           "hla_d_rlo_s100a_monocytes",
+                                           "cd163hi_monocytes_1_d7") )) %>% 
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
+          scale_color_carto_c(name = "average log2/n fold change: ",
+                           type = "diverging", palette = "Geyser", direction = 1)
+
+
+seurat_monocytes_markers_add %>% 
+#seurat_monocytes_markers %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% "HLA-DRB1") %>% 
+  mutate(gene=factor(gene, levels ="HLA-DRB1" )) %>% 
+  # arrange(gene) %>% 
+  mutate(cluster=factor(cluster, levels =c("classical_monocytes",
+                                           "non_classical_monocytes",
+                                           "hla_dr_cd83_monocytes",
+                                           "hla_d_rlo_s100a_monocytes",
+                                           "cd163hi_monocytes_1_d7") )) %>% 
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
+          scale_color_carto_c(name = "average log2 fold change: ",
+                           type = "diverging",
+                           palette = "Geyser", direction = 1)
+
+```
+########
+```{r}
+meta_data <- tibble(disease_stage=seurat_monocytes$disease_stage, cluster=seurat_monocytes$cluster_clean,donor=seurat_monocytes$donor, day_pso=seurat_monocytes$days_after_onset, severity= seurat_monocytes$group_per_sample)
+meta_data %>%
+  group_by(cluster, severity, donor) %>% 
+  summarise(n=n()) %>% 
+  #ungroup() %>% 
+  group_by(donor) %>%
+  mutate(sum_per_donor=sum(n), freq_of_donor_per_cluster=n/sum(n)) %>% arrange(cluster,desc(freq_of_donor_per_cluster)) 
+```
+```{r}
+library(ggbeeswarm)
+meta_data %>%
+  group_by(cluster, severity, donor,day_pso) %>% 
+  summarise(n=n()) %>% 
+  #ungroup() %>% 
+  group_by(donor) %>%
+  mutate(sum_per_donor=sum(n),freq_of_donor_per_cluster=n/sum(n)) %>%
+  arrange(donor) %>% 
+  ggplot(aes(x=severity,y=freq_of_donor_per_cluster, color=day_pso))+geom_quasirandom()+facet_grid(~cluster)
+```
+```{r}
+meta_data %>%
+  group_by(cluster, severity, donor,day_pso) %>% 
+  summarise(n=n()) %>% 
+  #ungroup() %>% 
+  group_by(donor) %>%
+  mutate(sum_per_donor=sum(n),freq_of_donor_per_cluster=n/sum(n)) %>%
+  arrange(donor) %>% 
+  ggplot(aes(x=day_pso,y=freq_of_donor_per_cluster, color=severity))+geom_point()+facet_grid(~cluster)
+```
+
+
+
+#monocyte&neutrophil subset
+```{r}
+seurat_monocytes_neutrophils <-subset(x = seurat_c1_full_FG, idents = c("0","6","7","12","8", "11","13"))
+
+seurat_monocytes_neutrophils |> write_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_neutrophils_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+seurat_monocytes_neutrophils <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_neutrophils_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+```
+
+```{r}
+Idents(seurat_monocytes_neutrophils) <- "cluster_clean"
+#seurat_monocytes_neutrophils <- subset(seurat_monocytes_neutrophils, downsample = 500)
+#seurat_monocytes_markers <- FindAllMarkers(seurat_monocytes_subset, logfc.threshold = 0.01, min.pct = 0.01,)
+seurat_monocytes_neutrophils_markers <- FindAllMarkers(seurat_monocytes_neutrophils,max.cells.per.ident = 500#,return.thresh =0 
+ )
+genes_manual_select <- c("HLA-DRA", "HLA-DRB1", "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A14", "FCGR3A", "FCEER1G","CX3CR1", "RNASE2", "KLF4", "CCR2", "CCR5", "SELL", "CD68","CD11c", "ITGAX", "ITGAM","ITGAL") #SELL="CD62L
+
+additional_markers<- FindAllMarkers(seurat_monocytes_neutrophils, features = genes_manual_select, logfc.threshold = 0,min.pct = 0, return.thresh = 0.001)
+
+seurat_monocytes_neutrophils_markers <- seurat_monocytes_neutrophils_markers %>% as_tibble()%>%  bind_rows(as_tibble(additional_markers)) %>% select(-p_val,-p_val_adj) %>% distinct()
+seurat_monocytes_neutrophils_markers %>% filter(gene=="S100A9")          
+```
+
+```{r}
+
+
+seurat_monocytes_neutrophils_markers%>% 
+  #filter(gene %in% top_genes_fc) %>% 
+  group_by(cluster)%>%
+  filter(gene %in% genes_manual_select) %>% 
+  #mutate(gene=factor(gene, levels = genes_manual_select ))%>%
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="white",high="red", space ="Lab" )
+
+
+seurat_monocytes_neutrophils_markers%>% 
+  #filter(gene %in% top_genes_fc) %>% 
+  group_by(cluster)%>%
+  filter(gene %in% genes_manual_select) %>% distinct()%>% arrange(gene)
+```
