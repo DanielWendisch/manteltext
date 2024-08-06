@@ -204,7 +204,8 @@ module_score_umaps <- function(object,
                                genesets_levels="",
 
                                limits = c(-0.5, 1),
-                               pattern) {
+                               pattern,
+                               pt_size=0.25) {
   
   #copy metadata into separte dataframe
   scores <- object@meta.data[, which(
@@ -283,7 +284,8 @@ module_score_one_umap <- function(object,
                                genesets_levels="",
                                
                                limits = c(-0.5, 1),
-                               pattern) {
+                               pattern,
+                               pt_size=0.25) {
   
   #copy metadata into separte dataframe
   scores <- tibble(
@@ -321,7 +323,7 @@ module_score_one_umap <- function(object,
       col = Score
     )
   ) +
-    ggplot2::geom_point(size = 0.25) +
+    ggplot2::geom_point(size = pt_size) +
     ggplot2::facet_wrap(~Geneset, nrow = 4)+
     ggplot2::scale_color_distiller(
       palette = "RdYlBu", direction = -1, limits = limits
@@ -458,7 +460,54 @@ score_violin_theme_patchwork <- function(limits, p_score){list(
   viridis::scale_fill_viridis(direction = -1, option = "A")
 )}
 #######################
-
+score_violin_theme_patchwork_no_points <- function(limits, p_score){list(
+  # ggplot2::geom_point(
+  #   position = "jitter",size=0.1
+  # ) ,
+  ggplot2::geom_hline(
+    mapping = ggplot2::aes(yintercept = ms), col = "darkgrey", size = 1
+  ) ,
+  ggplot2::geom_hline(
+    mapping = ggplot2::aes(yintercept = ms), col = "black", size = 0.1
+  ) ,
+  ggplot2::geom_violin(scale = "width", draw_quantiles = 0.5) ,
+  #ggplot2::facet_wrap(~Geneset, nrow = 4) ,
+  ggplot2::scale_color_distiller(
+    palette = "RdYlBu", 
+    direction = -1, limits = limits
+  ) ,
+  ggplot2::scale_fill_manual(values = color.cluster) ,
+  ggplot2::theme_classic(#base_size = 1
+  ) ,
+  ggplot2::theme(
+    #strip.text   = ggplot2::element_text(size = 12),
+    axis.text.x  = ggplot2::element_blank(),
+    axis.ticks.x = ggplot2::element_blank()
+  ) , 
+  ggplot2::scale_y_continuous(limits = c(-0.5, 2.4)) ,
+  ggplot2::guides(
+    col = ggplot2::guide_colorbar(
+      #barwidth = 8, barheight = 1,
+      frame.colour = "black", ticks = FALSE,
+      direction = "horizontal"
+    ),
+    fill = ggplot2::guide_legend(
+      order = 1, direction = "horizontal", title.position = "top"
+    )
+  ) ,
+  ggplot2::labs(col = NULL, x = NULL) ,
+  ggnewscale::new_scale("fill") ,
+  ggplot2::geom_label(
+    data = p_score,
+    mapping = ggplot2::aes(
+      label = label, y = 2.3, fill = label, col = NULL
+    ),
+    size = 2,
+    color = "white"
+  ) ,
+  viridis::scale_fill_viridis(direction = -1, option = "A")
+)}
+#################
 
 
 wilcox_cluster_to_rest <- function(data, geneset_var="Geneset", cluster_var="Cluster"){

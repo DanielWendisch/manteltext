@@ -36,7 +36,8 @@ n_highest <- (two_highest$rank=="highest") %>% sum()
 
 
 
-dat <- p_avg_scores_t %>% clean_names() %>% left_join(cohens_d_module_scores_fibrosis_donor,by = c("geneset", "cluster")) %>% arrange(-p_adjust) %>% left_join(two_highest,by = c("geneset", "cluster"))%>% mutate(p_adjust_highest=if_else(rank=="highest", p_value*n_highest, NULL)) %>% mutate(sig=if_else(p_adjust_highest<0.05,"sig","not sig.")) %>% arrange(p_adjust_highest) %>% mutate(cluster= factor(cluster, levels = names(color.cluster)))
+dat <- p_avg_scores_t %>% clean_names() %>% left_join(cohens_d_module_scores_fibrosis_donor,by = c("geneset", "cluster")) %>% arrange(-p_adjust) %>% left_join(two_highest,by = c("geneset", "cluster"))%>% 
+  mutate(p_adjust_highest=ifelse(rank=="highest", p_value*n_highest, NULL)) %>% mutate(sig=if_else(p_adjust_highest<0.05,"sig","not sig.")) %>% arrange(p_adjust_highest) %>% mutate(cluster= factor(cluster, levels = names(color.cluster)))
 
 dat <- dat%>% 
   filter(geneset!="Adam_ProfibroticM") %>% mutate(geneset=factor(geneset, levels =  c("Ayau_FABP4+Mp","Ayau_IPFeMp","Reyf_MCluster0" ,"Reyf_MCluster1" ,"Reyf_Mfibrosis", "Reyf_MCluster2", "Reyf_MCluster3","Mors_0FABP4+M" ,   "Mors_6FCN1+M"  ,"Mors_1SPP1+M","Mors_1SPP1+MIPF","overlap_set","intersect_set")   

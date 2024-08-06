@@ -1,0 +1,181 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(Seurat)
+library(janitor)
+library(future)
+library(rcartocolor)
+```
+
+```{r}
+path_data_file <- "..\\..\\..\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- "..\\output\\"
+
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                  "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+```
+
+```{r}
+genes_manual_select_1 <- c("HLA-DRA", 
+                           "HLA-DRB1",
+                         #"HLA-DRB3",
+                         #"HLA-DRB4",
+                         #"HLA-DRB5",#cannot be computed
+                         "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A12", "FCGR3A", "FCER1G","CX3CR1", "RNASE2", "KLF4", "CCR2", "CCR5", "SELL", "CD68", "ITGAX", "ITGAM","ITGAL", "CD163", "CD83","DDX5","S100A4", "CCNL1", "GPX1","CD14") #SELL="CD62L
+genes_manual_select_1 <- c("HLA-DRA", "HLA-DRB1",
+                         #"HLA-DRB3",
+                         #"HLA-DRB4",
+                         #"HLA-DRB5",#cannot be computed
+                         "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A12", "FCGR3A", "FCER1G","CX3CR1", "RNASE2", "KLF4", "CCR2", "CCR5", "SELL", "CD68", "ITGAX", "ITGAM","ITGAL", "CD163", "CD83","DDX5","S100A4", "CCNL1", "GPX1","CD14")
+
+
+
+genes_manual_select_2 <-c("MAVS","NOD2","KLF4","CIITA", "FCGR3A","CX3CR1","BATF3","CSF1","SDC4","CXCL3","CCL2")
+
+```
+
+```{r}
+Idents(seurat_monocytes) <- "cluster_combined"
+#plan(strategy = "multisession")
+
+
+
+# seurat_monocytes_markers<- FindAllMarkers(seurat_monocytes#,max.cells.per.ident = 400
+#                                           )
+# seurat_monocytes_markers %>% write_rds(paste0(path_data_file, "seurat_monocytes_markers.rds"))
+seurat_monocytes_markers <- read_rds(paste0(path_data_file, "seurat_monocytes_markers.rds") )
+plan('sequential')
+
+additional_markers_mono<- FindAllMarkers(seurat_monocytes,
+                                         features = genes_manual_select_1,
+                                         logfc.threshold = 0,
+                                         min.pct = 0,
+                                         return.thresh = 1)
+
+
+
+
+
+seurat_monocytes_markers %>% filter(!(str_detect(gene, pattern = "RP")), avg_log2FC>0) %>% group_by(cluster) %>% slice_min(p_val_adj, n=30)
+seurat_monocytes_markers <- seurat_monocytes_markers %>%  mutate(cluster=factor(cluster, levels =c("Classical_Monocytes",
+                                           "Non_classical_Monocytes",
+                                           "HLA_DRhi_CD83_Monocytes",
+                                           "HLA_DRlo_s100a_Monocytes",
+                                           "CD163hi_Monocytes_donor1_day1") )) 
+seurat_monocytes_markers_add <- seurat_monocytes_markers %>% as_tibble()%>%  bind_rows(as_tibble(additional_markers_mono)) %>% select(-p_val,-p_val_adj) %>% distinct(gene,cluster, .keep_all = T)
+```
+
+```{r}
+Idents(seurat_monocytes) <- "cluster_combined"
+seurat_monocytes_clean <- subset(seurat_monocytes,
+                           idents= "CD163hi_Monocytes_donor1_day1",
+                           invert=TRUE)
+seurat_monocytes_clean <- seurat_monocytes
+markers_final <- genes_manual_select_1 <- c(
+  "HLA-DRA", "HLA-DRB1", "FYB",
+  "FCGR3A", "FCER1G","CX3CR1",
+  "ITGAL",  "C1QA",  
+  "CD83","IFI27","IFI44L", "IRF1","IL1B", 
+  "S100A8", "S100A9", "S100A12",
+  "SELL",
+  "CD163", "CD14")
+final_markers<- FindAllMarkers(seurat_monocytes_clean,
+                                         features = markers_final,
+                                         logfc.threshold = 0,
+                                         min.pct = 0,
+                                         return.thresh = 1)
+
+final_markers <- final_markers %>%  mutate(cluster=factor(cluster, levels =c("Classical_Monocytes",
+                                           "Non_classical_Monocytes",
+                                           "HLA_DRhi_CD83_Monocytes",
+                                           "HLA_DRlo_s100a_Monocytes") )) 
+
+
+
+final_markers%>% 
+#seurat_monocytes_markers %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% genes_manual_select_1) %>% 
+  mutate(gene=factor(gene, levels =genes_manual_select_1 )) %>% 
+  # arrange(gene) %>% 
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
+          scale_color_carto_c(name = "average log2/n fold change: ",
+                           type = "diverging", palette = "Geyser", direction = 1)
+```
+
+
+```{r}
+#seurat_monocytes_markers_add%>% 
+seurat_monocytes_markers_add %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% genes_manual_select_1) %>% 
+  mutate(gene=factor(gene, levels =genes_manual_select_1 )) %>% 
+  # arrange(gene) %>% 
+  
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +theme_minimal()+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+seurat_monocytes_markers_add %>% 
+#seurat_monocytes_markers %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% genes_manual_select_1) %>% 
+  mutate(gene=factor(gene, levels =genes_manual_select_1 )) %>% 
+  # arrange(gene) %>% 
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
+          scale_color_carto_c(name = "average log2/n fold change: ",
+                           type = "diverging", palette = "Geyser", direction = 1)
+
+seurat_monocytes_markers_add %>% 
+#seurat_monocytes_markers %>% 
+  # mutate(gene=str_replace_all(gene,"-", ""))%>%
+  #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
+  filter(gene %in% "HLA-DRB1") %>% 
+  mutate(gene=factor(gene, levels ="HLA-DRB1" )) %>% 
+  # arrange(gene) %>%  %>% 
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
+          scale_color_carto_c(name = "average log2 fold change: ",
+                           type = "diverging",
+                           palette = "Geyser", direction = 1)
+
+```
+```{r}
+seurat_monocytes_markers %>% subset(cluster=="Classical_Monocytes") %>% 
+  distinct(gene,.keep_all = T)%>% filter(pct.1>0.6)%>%  arrange(-avg_log2FC )
+
+seurat_monocytes_markers %>% subset(cluster=="Classical_Monocytes") %>% 
+  distinct(gene,.keep_all = T)%>% mutate(pct_dif=pct.2-pct.1) %>%  filter(pct_dif>0.2 )%>%  arrange(-avg_log2FC )
+
+seurat_monocytes_markers %>% filter(str_detect(cluster,"CD83")) %>% 
+  distinct(gene,.keep_all = T)%>% mutate(pct_dif=pct.2-pct.1) %>%  #filter(pct_dif>0.2 )%>% 
+  arrange(-avg_log2FC )
+```
+```{r}
+seurat_monocytes_clean
+gene_sums <- slot(seurat_monocytes_clean, "assays")[["RNA"]] %>% slot("counts") %>%  sparse_Sums(rowSums=T)
+gene_sums_tbl <- tibble(gene=rownames(seurat_monocytes_clean), gene_sums=gene_sums) %>% mutate(gene=fct_reorder(gene, -gene_sums)) %>% slice_max(gene_sums, n=100) %>% mutate(is_S100A8=case_when(gene=="S100A8"~"S100A8",gene=="S100A9"~"S100A9", gene=="S100A12"~"S100A12", TRUE~"other")) %>% arrange(-gene_sums) %>% mutate(rank=rank(desc(gene_sums)))
+gene_sums_tbl
+gene_sums_tbl%>%  ggplot(aes(gene,gene_sums, fill=is_S100A8))+geom_col()
+
+```
+

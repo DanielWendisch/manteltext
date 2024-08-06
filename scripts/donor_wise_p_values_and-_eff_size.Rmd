@@ -128,6 +128,31 @@ dat%>%
   xlab("gene set")
 
 
+dat%>% 
+  filter(geneset !="Adam_ProfibroticM") %>% 
+  ggplot()+geom_tile(aes(x=geneset, y=cluster, fill=cohens_d)) +
+  scale_fill_viridis_c()+geom_point(data =(dat %>% filter(!is.na(sig))) ,aes(x=geneset, y=cluster,color=sig))+scale_color_manual(values = c("not sig"="grey", "sig"="black"))+ scale_y_discrete(names(color.cluster))+
+  theme(axis.text.x=element_text(angle = 45,  hjust=1,),
+        axis.text.y=element_text( colour = color.cluster),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text("gene set"))+ 
+  xlab("gene set")
+
+poster_sel <- c("intersect_set","overlap_set", "Mors_1SPP1+MIPF", "Reyf_Mfibrosis", "Reyf_MCluster1", "Ayau_IPFeMp" )    
+dat_poster <- dat%>% 
+  filter(geneset %in% poster_sel) 
+
+dat_poster%>% 
+  ggplot()+geom_tile(aes(x=geneset, y=cluster, fill=cohens_d)) +
+  scale_fill_viridis_c()+geom_point(data =(dat_poster %>% filter(!is.na(sig))) ,aes(x=geneset, y=cluster,color=sig))+scale_color_manual(values = c("not sig"="grey", "sig"="black"))+ scale_y_discrete(names(color.cluster))+
+  theme(axis.text.x=element_text(angle = 45,  hjust=1,),
+        axis.text.y=element_text( colour = color.cluster),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text("gene set"))+ 
+  xlab("gene set")
+
+
+ggsave("heatmap_poster_fib_cohen.eps", dpi = 800)
 ```
 
 

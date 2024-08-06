@@ -3,18 +3,16 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-
 ```{r}
-"..\\output\\meta_data_condition_per_sample_donor_day.csv"
-"..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv"
-"control"
-"mild"
 getwd()
-file.choose()
 ```
 
 ```{bash}
-Rscript scripts\\cell_counts_per_group_schulte_schrepping_cohort_1.R
+
+Rscript cell_counts_per_group_schulte_schrepping_cohort_1.R
+```
+```{bash}
+python python\\sccoda_functionalized.txt
 ```
 
 

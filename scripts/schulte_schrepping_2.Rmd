@@ -60,7 +60,7 @@ new_cluster_names<-
 new_cluster_names_clean <- make_clean_names(new_cluster_names)
 names(new_cluster_names_clean) <- names(new_cluster_names)
 #create new metadata variable for cluster names
-seurat_c1_full_FG$cluster_clean <- new_cluster_names_clean[seurat_c1_full_FG$RNA_snn_res.0.4 |> as.character()]
+seurat_c1_full_FG$cluster_clean <- new_cluster_names_clean[seurat_c1_full_FG$RNA_snn_res.0.4 |> as.character()] |> as.character()
 
 ```
 
@@ -97,6 +97,7 @@ meta_data_groups %>% write_csv(paste0(path_output_file,"meta_data_groups.csv"))
 meta_data_condition_per_sample_donor_day %>% write_csv(paste0(path_output_file,"meta_data_condition_per_sample_donor_day.csv"))
 meta_data_condition_per_sample_donor_day_grouping %>% write_csv(paste0(path_output_file,"meta_data_condition_per_sample_donor_day_grouping.csv"))
 ```
+
 ```{r}
 meta_data_all <- tibble(cluster=seurat_c1_full_FG$cluster_clean,
        donor=seurat_c1_full_FG$donor,

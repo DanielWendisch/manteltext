@@ -18,7 +18,7 @@ python .\\python\\severe_vs_mild.txt
 
 ```{r combinine data all up and down votes, message=FALSE, warning=FALSE}
 #function that reads scsconda output files and binds them into one tibble
-make_df <- function(rel_path_folder=".\\python\\", pattern="mild_vs_control.csv"){
+make_df <- function(rel_path_folder="..\\python\\", pattern="mild_vs_control.csv"){
   files_names<- list.files(rel_path_folder) %>% str_subset(pattern) %>% paste0(rel_path_folder,.)
   files_names%>%
   #create alist of tibbles of the scConda results

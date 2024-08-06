@@ -1,0 +1,144 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# includes control sampels from other study
+```{r message=FALSE, warning=FALSE}
+library(DESeq2)
+library(Seurat)
+library("textTinyR")
+library(tidyverse)
+library(ggrepel)
+
+```
+
+
+```{r function}
+
+make_idents_counts <- function(
+    ds,
+    idents_choose="seurat_clusters",
+    assay_="RNA",
+    slot_="counts",
+    min_cell_num=200){
+        
+        Idents(ds) <- idents_choose
+        group_names <- unique(Idents(ds))
+        reads <- slot(ds, "assays")[[assay_]] %>% slot(slot_)
+        reads <- reads[rownames(reads) %>% str_subset(pattern = "[.]",negate = T),]
+        sum_counts_ds <- tibble(.rows =  nrow(reads))
+        #z=1
+        for (i in seq_along(group_names)) {
+          #print(colnames(sum_counts_ds))
+          print(i)
+          i_cells <- WhichCells(object =ds,idents = group_names[i])
+          if (length(i_cells)<min_cell_num) {
+            sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=0)
+          colnames(sum_counts_ds)[i] <- paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num))
+          # print(paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num)))
+          # print(i)
+            
+            #if (z==2) (return(sum_counts_ds))
+          #z=z+1
+          next}
+          #i_cells <- WhichCells(object =ds,idents = "hla_d_rlo_s100a_monocytes_C19-CB-0003")
+          sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=reads[,i_cells] %>%  sparse_Sums(rowSums=T))
+          colnames(sum_counts_ds)[i] <- as.character(group_names[i])
+          #print(as.character(colnames(sum_counts_ds)[i]))
+          
+        }
+        #colnames(sum_counts_ds) <- group_names
+        sum_counts_ds <- sum_counts_ds %>%  mutate(gene=rownames(reads)) %>% relocate(gene)
+        return(sum_counts_ds)
+}
+
+```
+```{r}
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- ".\\output\\"
+```
+
+```{r}
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+
+seurat_monocytes$cluster_donor <- paste0(seurat_monocytes$cluster_clean, "__",seurat_monocytes$donor)
+tibble(cluster=seurat_monocytes$cluster_clean,donor=seurat_monocytes$donor ) %>% group_by(cluster,donor) %>% summarise(n=n()) %>% filter(n>49)
+```
+```{r}
+ds_monocytes <-  make_idents_counts(seurat_monocytes, idents_choose = "cluster_donor")
+ds_monocytes %>% write_rds( paste0(path_output_file,"bulk_sums_monocytes.rds") )
+ds_monocytes %>% select(!(contains("_smaller"))) 
+ds_monocytes %>% select(contains("_smaller")) 
+```
+
+```{r}
+x <- ds_monocytes %>% select(!(contains("_smaller"))) %>% ungroup()
+expression_matrix <- as.matrix(x %>% select(-gene)) 
+rownames(expression_matrix) <- x %>% pull(gene)
+```
+
+
+```{r}
+design_x <-colnames(expression_matrix)%>% 
+  tibble(dings=.) %>% separate(col= dings,into = c("cell_type","donor"),sep = "__") %>%mutate_all(as_factor)
+design_x
+reihenfolge <- paste0(design_x$cell_type,"__", design_x$donor)
+expression_matrix <- expression_matrix[,reihenfolge]
+
+```
+
+##takes looong
+
+```{r eval=FALSE, include=FALSE}
+# what does this do
+
+clusters <- unique(design_x$cell_type)
+res_list <- vector(mode="list", length = length(clusters))
+for (cluster in clusters) {
+  design_cluster <- design_x %>% mutate(cell_type=fct_other(cell_type,keep = cluster))
+  print(design_cluster)
+  flush.console()
+  res_list[[cluster]]<- DESeqDataSetFromMatrix(expression_matrix,
+                              colData=design_cluster,
+                              design= ~  cell_type+ donor ) %>% DESeq()
+  
+}
+
+write_rds(res_list, paste0(path_output_file,"deseq_monocytes_results.rds"))
+```
+
+```{r}
+res_list <- read_rds(paste0(path_output_file,"deseq_monocytes_results.rds"))
+
+res_hla_d_rlo_s100a_monocytes <- results( res_list[["hla_d_rlo_s100a_monocytes"]], 
+                                          contrast= c("cell_type", "hla_d_rlo_s100a_monocytes", "Other")) %>% as_tibble(rownames = "gene")
+
+res_non_classical_monocytes<- results( res_list$non_classical_monocytes, 
+                                          contrast= c("cell_type", "non_classical_monocytes", "Other")) %>% as_tibble(rownames = "gene")
+
+res_classical_monocytes<- results( res_list$classical_monocytes, 
+                                          contrast= c("cell_type", "classical_monocytes", "Other")) %>% as_tibble(rownames = "gene")
+
+res_hla_d_rhi_cd83_monocytes<- results( res_list$hla_d_rhi_cd83_monocytes, 
+                                          contrast= c("cell_type", "hla_d_rhi_cd83_monocytes", "Other")) %>% as_tibble(rownames = "gene")
+
+res_cd163hi_monocytes_1_d7<- results( res_list$cd163hi_monocytes_1_d7, 
+                                          contrast= c("cell_type", "cd163hi_monocytes_1_d7", "Other")) %>% as_tibble(rownames = "gene")
+
+
+res_hla_d_rlo_s100a_monocytes %>% filter(log2FoldChange>0) %>% arrange(pvalue)
+res_hla_d_rlo_s100a_monocytes %>% filter(log2FoldChange<0) %>% arrange(pvalue)
+
+res_non_classical_monocytes %>% filter(log2FoldChange>0) %>% arrange(pvalue)
+res_non_classical_monocytes %>% filter(log2FoldChange<0) %>% arrange(pvalue)
+
+
+res_classical_monocytes %>% filter(log2FoldChange>0) %>% arrange(pvalue)
+res_hla_d_rhi_cd83_monocytes %>% filter(log2FoldChange>0) %>% arrange(pvalue)
+res_hla_d_rhi_cd83_monocytes %>% filter(log2FoldChange<0) %>% arrange(pvalue)
+res_cd163hi_monocytes_1_d7 %>% filter(log2FoldChange>0) %>% arrange(pvalue)
+```
+

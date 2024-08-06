@@ -1,0 +1,165 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+library(DESeq2)
+library(Seurat)
+library("textTinyR")
+library(tidyverse)
+library(ggrepel)
+
+```
+
+
+```{r function}
+
+make_idents_counts <- function(
+    ds,
+    idents_choose="seurat_clusters",
+    assay_="RNA",
+    slot_="counts",
+    min_cell_num=200,
+    keep=NULL){
+        
+        Idents(ds) <- idents_choose
+        group_names <- unique(Idents(ds))
+        if (!is.null(keep)) {group_names <- keep
+          
+        }
+        reads <- slot(ds, "assays")[[assay_]] %>% slot(slot_)
+        reads <- reads[rownames(reads) %>% str_subset(pattern = "[.]",negate = T),]
+        sum_counts_ds <- tibble(.rows =  nrow(reads))
+        #z=1
+        for (i in seq_along(group_names)) {
+          print(i)
+          #print(colnames(sum_counts_ds))
+          print(group_names[i])
+          i_cells <- WhichCells(object =ds,idents = group_names[i])
+          if (length(i_cells)<min_cell_num) {
+            sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=0)
+          colnames(sum_counts_ds)[i] <- paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num))
+          # print(paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num)))
+          # print(i)
+            
+            #if (z==2) (return(sum_counts_ds))
+          #z=z+1
+          next}
+          #i_cells <- WhichCells(object =ds,idents = "hla_d_rlo_s100a_monocytes_C19-CB-0003")
+          sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=reads[,i_cells] %>%  sparse_Sums(rowSums=T))
+          colnames(sum_counts_ds)[i] <- as.character(group_names[i])
+          #print(as.character(colnames(sum_counts_ds)[i]))
+          
+        }
+        #colnames(sum_counts_ds) <- group_names
+        sum_counts_ds <- sum_counts_ds %>%  mutate(gene=rownames(reads)) %>% relocate(gene)
+        return(sum_counts_ds)
+}
+
+```
+```{r}
+path_data_file <- "..\\..\\..\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- ".\\output\\"
+```
+
+```{r}
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+
+seurat_monocytes$donor_condition_exp <- paste0(seurat_monocytes$donor, "__",
+                                           seurat_monocytes$group_per_sample,"__",
+                                           seurat_monocytes$experiment)
+
+keep <- tibble(
+               donor=seurat_monocytes$donor ,
+               condition=seurat_monocytes$group_per_sample,
+               experiment=seurat_monocytes$experiment) %>%
+  group_by(donor,condition,experiment) %>% 
+  summarise(n=n()) %>% filter(n>50, condition %in% c("mild","severe"#,"control"
+                                                 )) %>% 
+  ungroup()%>% 
+  mutate(keep=paste0(donor,"__",
+                     condition,"__",
+                     experiment
+                     )) %>% 
+  pull(keep)
+
+
+```
+```{r}
+ds_monocytes <-  make_idents_counts(seurat_monocytes,
+                                        idents_choose = "donor_condition_exp",
+                                        keep = keep,
+                                        min_cell_num=49)
+
+#ds_monocytes_100 %>% write_rds( paste0(path_output_file,"bulk_sums_monocytes_donor_100.rds") )
+# ds_monocytes %>% select(!(contains("_smaller"))) 
+# ds_monocytes %>% select(contains("_smaller")) 
+```
+
+```{r}
+x <- ds_monocytes %>% select(!(contains("_smaller"))) %>% ungroup()# _smaller doesnt work
+expression_matrix <- as.matrix(x %>% select(-gene)) 
+rownames(expression_matrix) <- x %>% pull(gene)
+```
+
+
+```{r}
+design_x <-colnames(expression_matrix)%>% 
+  tibble(dings=.) %>% separate(col= dings,into = c("donor","condition","experiment"),sep = "__") %>%mutate_all(as_factor) %>% arrange(condition)
+design_x
+reihenfolge <- paste0(design_x %>% pull(donor),"__", design_x%>% pull(condition),"__",design_x %>% pull(experiment))
+expression_matrix <- expression_matrix[,reihenfolge]
+colnames(expression_matrix)
+```
+
+##unforutnately contition is a linear combination of experiment and cannot be used as covariat, means experiment is not properly blocked
+
+```{r eval=FALSE, include=FALSE}
+
+clusters <- unique(design_x$condition)
+res_list <- vector(mode="list", length = 0)
+for (cluster in clusters) {
+  design_cluster <- design_x %>% mutate(condition=fct_other(condition,keep = cluster)) %>% select(condition)
+  print(design_cluster)
+  res_list[[cluster]]<- DESeqDataSetFromMatrix(expression_matrix,
+                              colData=design_cluster,
+                              design= ~ condition ) %>% DESeq()
+  
+}
+
+
+
+
+resultsNames(res_list[["mild"]])
+resultsNames(res_list[["severe"]])
+
+
+write_rds(res_list, paste0(path_output_file,"deseq_monocytes_condition_results_list.rds"))
+```
+
+```{r}
+res_severe_other <- results( res_list[["severe"]], 
+                                          contrast= c("condition", "severe", "Other")) %>% as_tibble(rownames = "gene")
+
+
+res_mild_other <- results( res_list[["mild"]], 
+                                          contrast= c("condition", "mild", "Other")) %>% as_tibble(rownames = "gene")
+
+
+
+
+
+res_severe_other %>% filter(log2FoldChange>0) %>% mutate(neg_log_p=-log(pvalue)) %>% arrange(-neg_log_p)
+res_severe_other%>% arrange(-log2FoldChange)%>% ggplot(aes(log2FoldChange, -log(padj))) + geom_point()
+res_severe_other%>% arrange(-log2FoldChange)%>% ggplot(aes(log2FoldChange, pvalue)) + geom_point()
+
+
+res_mild_other %>% filter(log2FoldChange>0) %>% arrange(pvalue)
+res_mild_other%>% arrange(-log2FoldChange) %>% ggplot(aes(log2FoldChange, -log(padj))) + geom_point()
+
+```
+

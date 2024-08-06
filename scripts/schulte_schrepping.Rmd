@@ -1,0 +1,214 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(Seurat)
+library(janitor)
+```
+
+```{r}
+mmc4 <- read_excel("data/mmc4.xlsx", sheet = "Fig4A.S3E") 
+mmc4 <- read_excel("data/mmc4.xlsx", sheet = "Fig2A.S2A") 
+
+colnames(mmc4)<- mmc4[2,]
+mmc4 <- mmc4[4:nrow(mmc4),1:7] 
+mmc4 <- mmc4%>% mutate(across(p_val:p_val_adj, as.numeric))
+mmc4%>% mutate(avg_logFC=is.numeric(avg_logFC))
+top_genes_fc <- mmc4 %>% filter(cluster %in% as.character(0:4)) %>% group_by(cluster) %>% slice_max(avg_logFC, n=10) %>% pull(gene) %>% unique()
+top_genes_pct <- mmc4 %>% filter(cluster %in% as.character(0:4)) %>% group_by(cluster) %>% slice_max(pct.1, n=10) %>% pull(gene) %>% unique()
+
+
+mmc4 %>% filter(gene %in% top_genes_fc) %>% group_by(cluster)%>%
+  filter(cluster %in% as.character(0:4)) %>% 
+    mutate(gene=factor(gene, levels = top_genes_fc ))%>%
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_logFC))+geom_point()
+
+mmc4 %>% filter(gene %in% top_genes_pct) %>% 
+  group_by(cluster)  %>% 
+  filter(cluster %in% as.character(0:4)) %>% ungroup() %>% 
+  mutate(gene=factor(gene, levels = top_genes_pct ))%>%
+  ggplot(aes(cluster,gene, size=pct.1, color=avg_logFC ))+geom_point()
+
+mmc4 %>% filter(gene=="CD163")
+names(mmc4)
+```
+
+```{r}
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- ".\\output\\"
+seurat_c1_full_FG <- readRDS("C:/Users/danne/raw_data/schulte_schrepping_et_al/seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds")
+Idents(seurat_c1_full_FG) <- "RNA_snn_res.0.4"
+seurat_c1_full_FG$RNA_snn_res.0.4 |>  unique()
+```
+```{r}
+new_cluster_names<-
+  c(
+  `0`="Classical Monocytes",
+  `7`="HLA DRhi CD83 Monocytes",
+  `12`="CD163hi Monocytes 1_d7",
+  `6`="HLA DRlo S100A Monocytes",
+  `8`="Non classical Monocytes",
+  `11`="Neutrophils",  
+  `13`="Immature Neutrophils",
+  `17`="mDCs",
+  `18`="pDCs",
+  `1`="CD4 T",
+  `3`="CD4 T",
+  `10`="CD4 T",
+  `2`="CD8 T",
+  `15`="CD8 T",
+  `9`="CD8 T",
+  `4`="NK",
+  `5`="B",
+  `19`="B",
+  `20`="B",
+  `16`="Plasmablasts",
+  `14`="Megakaryocyte",
+  `21`="mixed",
+  `22`="undefined"
+)
+seurat_monocytes <-subset(x = seurat_c1_full_FG, idents = c("0","6","7","12","8"#, "11"#,"17"
+                                                            ))
+new_cluster_names_clean <- make_clean_names(new_cluster_names)
+names(new_cluster_names_clean) <- names(new_cluster_names)
+seurat_monocytes$cluster_clean <- new_cluster_names_clean[seurat_monocytes$RNA_snn_res.0.4 |> as.character()]
+seurat_monocytes |> write_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+
+seurat_monocytes_neutrophils <-subset(x = seurat_c1_full_FG, idents = c("0","6","7","12","8", "11","13"
+                                                            ))
+new_cluster_names_clean <- make_clean_names(new_cluster_names)
+names(new_cluster_names_clean) <- names(new_cluster_names)
+seurat_monocytes_neutrophils$cluster_clean <- new_cluster_names_clean[seurat_monocytes_neutrophils$RNA_snn_res.0.4 |> as.character()]
+seurat_monocytes_neutrophils |> write_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_neutrophils_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+seurat_monocytes_neutrophils <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_neutrophils_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+```
+
+```{r}
+seurat_monocytes <- read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+DimPlot(seurat_c1_full_FG, group.by = "RNA_snn_res.0.4", label = T)
+DimPlot(seurat_monocytes, group.by = "RNA_snn_res.0.4", label = T)
+
+DimPlot(seurat_monocytes, group.by = "cluster_clean")
+Idents(seurat_monocytes) <- "cluster_clean"
+DimPlot(seurat_monocytes, cells.highlight = WhichCells(seurat_monocytes,idents="m_d_cs"))
+
+```
+
+```{r}
+Idents(seurat_monocytes) <- "cluster_clean"
+seurat_monocytes_subset <- subset(seurat_monocytes, downsample = 500)
+#seurat_monocytes_markers <- FindAllMarkers(seurat_monocytes_subset, logfc.threshold = 0.01, min.pct = 0.01,)
+seurat_monocytes_markers <- FindAllMarkers(seurat_monocytes_subset)
+#write_rds(seurat_monocytes_markers, paste0(path_output_file, "seurat_monocytes_markers.rds") )
+```
+
+```{r}
+Idents(seurat_monocytes_neutrophils) <- "cluster_clean"
+#seurat_monocytes_neutrophils <- subset(seurat_monocytes_neutrophils, downsample = 500)
+#seurat_monocytes_markers <- FindAllMarkers(seurat_monocytes_subset, logfc.threshold = 0.01, min.pct = 0.01,)
+seurat_monocytes_neutrophils_markers_2 <- FindAllMarkers(seurat_monocytes_neutrophils, logfc.threshold = 0.005, min.pct = 0.005,max.cells.per.ident = 500,return.thresh =0 )
+genes_manual_select <- c("HLA-DRA", "HLA-DRB1", "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A14", "FCGR3A")
+additional_markers<- FindAllMarkers(seurat_monocytes_neutrophils, features = genes_manual_select, logfc.threshold = 0,min.pct = 0, return.thresh = 0.001)
+seurat_monocytes_neutrophils_markers <- seurat_monocytes_neutrophils_markers %>% as_tibble()%>%  bind_rows(as_tibble(additional_markers))
+#write_rds(seurat_monocytes_neutrophils_markers_2, paste0(path_output_file, "seurat_monocytes_neutrophils_markers.rds") )
+seurat_monocytes_neutrophils_markers <- read_rds(paste0(path_output_file, "seurat_monocytes_neutrophils_markers.rds") )
+
+additional_markers %>% arrange(gene)
+
+```
+
+```{r}
+seurat_monocytes_markers <- read_rds(paste0(path_data_file, "seurat_monocytes_markers.rds") )
+
+hla_d_names <- seurat_monocytes@assays$RNA@data |> rownames() |> str_subset("HLA-D")
+hla_d_data <- seurat_monocytes@assays$RNA@data[hla_d_names,] |> as.matrix() |>  t() |> 
+  as_tibble() |>  
+  rowMeans()
+seurat_monocytes$hla_d <- hla_d_data
+FindAllMarkers(seurat_monocytes,features = c("CD83"), logfc.threshold = 0, min.pct = 0)
+
+top_genes_fc <- seurat_monocytes_markers %>% #filter(cluster %in% as.character(0:4)) %>% 
+  group_by(cluster) %>% slice_max(avg_log2FC, n=10) %>% pull(gene) %>% unique()
+top_genes_pct <- seurat_monocytes_markers %>% 
+ # filter(cluster %in% as.character(0:4)) %>% 
+  group_by(cluster) %>% slice_max(pct.1, n=10) %>% pull(gene) %>% unique()
+
+
+seurat_monocytes_markers %>% filter(gene %in% top_genes_fc) %>% group_by(cluster)%>%
+  #filter(cluster %in% as.character(0:4)) %>% 
+    mutate(gene=factor(gene, levels = top_genes_fc ))%>%
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+geom_point()+scale_color_gradient(low ="blue",
+                                                                                             high="red")+scale_color_gradient2(midpoint=0, low="blue", mid="white",
+                     high="red", space ="Lab" )
+seurat_monocytes_markers %>% filter(gene %in% top_genes_pct) %>% 
+  group_by(cluster)  %>% 
+  #filter(cluster %in% as.character(0:4)) %>% ungroup() %>% 
+  mutate(gene=factor(gene, levels = top_genes_pct ))%>%
+  ggplot(aes(cluster,gene, size=pct.1, color=avg_log2FC ))+geom_point()+scale_color_gradient(low ="blue",
+                                                                                             high="red")+scale_color_gradient2(midpoint=0, low="blue", mid="white",
+                     high="red", space ="Lab" )
+```
+```{r}
+seurat_monocytes_markers |> filter(str_detect(gene,"HLA-D")) |> group_by(gene,cluster) |> summarise(mean(avg_log2FC), mean(pct.1))
+
+seurat_monocytes_markers |> filter(str_detect(gene,"HLA-D")) |> arrange(gene)
+
+
+seurat_monocytes_markers |> filter(str_detect(gene,"HLA-DPA1")) |>   group_by(cluster)  %>% 
+  #filter(cluster %in% as.character(0:4)) %>% ungroup() %>% 
+  #mutate(gene=factor(gene, levels = top_genes_pct ))%>%
+  ggplot(aes(cluster,gene, size=pct.1, color=avg_log2FC ))+geom_point()+scale_color_gradient(low ="blue",
+                                                                                             high="red")+scale_color_gradient2(midpoint=0, low="blue", mid="white",
+                     high="red", space ="Lab" )
+
+
+seurat_monocytes_markers |> filter(str_detect(gene,"HLA-D")) |>   group_by(cluster)  %>% 
+  #filter(cluster %in% as.character(0:4)) %>% ungroup() %>% 
+  #mutate(gene=factor(gene, levels = top_genes_pct ))%>%
+  ggplot(aes(cluster,gene, size=pct.1, color=avg_log2FC ))+geom_point()+scale_color_gradient(low ="blue",
+                                                                                             high="red")+scale_color_gradient2(midpoint=0, low="blue", mid="white",
+                     high="red", space ="Lab" )
+```
+```{r}
+top_genes_fc <- seurat_monocytes_neutrophils_markers %>% #filter(cluster %in% as.character(0:4)) %>% 
+  group_by(cluster) %>% slice_max(avg_log2FC, n=10) %>% pull(gene) %>% unique()
+top_genes_pct <- seurat_monocytes_neutrophils_markers %>% 
+ # filter(cluster %in% as.character(0:4)) %>% 
+  group_by(cluster) %>% slice_max(pct.1, n=10) %>% pull(gene) %>% unique()
+
+seurat_monocytes_neutrophils_markers%>% filter(gene %in% top_genes_fc) %>% 
+  group_by(cluster)%>%
+  #filter(cluster %in% as.character(0:4)) %>% 
+  mutate(gene=factor(gene, levels = top_genes_fc ))%>%
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="white",high="red", space ="Lab" )
+
+```
+```{r}
+genes_manual_select <- c("HLA-DRA", "HLA-DRB1", "LYZ", "IL1B", "ISG15", "C1QA", "S100A8", "S100A9", "S100A14", "FCGR3A")
+
+seurat_monocytes_neutrophils_markers%>% 
+  #filter(gene %in% top_genes_fc) %>% 
+  group_by(cluster)%>%
+  filter(gene %in% genes_manual_select) %>% 
+  #mutate(gene=factor(gene, levels = genes_manual_select ))%>%
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="white",high="red", space ="Lab" )
+
+
+seurat_monocytes_neutrophils_markers%>% 
+  #filter(gene %in% top_genes_fc) %>% 
+  group_by(cluster)%>%
+  filter(gene %in% genes_manual_select) %>% distinct()%>% arrange(gene)
+```
+

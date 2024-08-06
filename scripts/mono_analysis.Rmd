@@ -44,10 +44,10 @@ VlnPlot(mono, "overlap_set_score_fibrosis")
 VlnPlot(mono, "Ayau_IPFeMp_score_fibrosis")
 VlnPlot(mono, "Mors_1SPP1+MIPF_score_fibrosis")
 VlnPlot(mono ,"Reyf_MCluster1_score_fibrosis")
-VlnPlot(mono, ensemblizer_seur("APOE"))
+ VlnPlot(mono, ensemblizer_seur("APOE"))
 
 
-FeatureScatter(mono, feature1 ="nCount_SCoV2", feature2 = "overlap_set_score_fibrosis")
+x2 <- FeatureScatter(mono, feature1 ="nCount_SCoV2", feature2 = "overlap_set_score_fibrosis")
 
 ```
 ```{r}
@@ -56,7 +56,7 @@ dot_plot_condition_seur(genes_sorted = mono_genset_select$overlap_set %>% genifi
 
 dot_plot_condition_seur(genes_sorted = mono_genset_select$`Mors_1SPP1+M` %>% genifiy_seur() , seur_obj = mono )
 
-VlnPlot(mono , ensemblizer_seur("GLMP"), group.by = "condition")
+x1 <- VlnPlot(mono , ensemblizer_seur("GLMP"), group.by = "condition")
 
 VlnPlot(mono , ensemblizer_seur("ETV5"), group.by = "condition")
 

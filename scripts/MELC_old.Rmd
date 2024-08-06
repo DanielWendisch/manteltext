@@ -190,7 +190,7 @@ library(sf)
 #path1 <- ("C:/Users/danne/OneDrive - Charité - Universitätsmedizin Berlin/Daniel/CoV/Wendisch_et_al/Experiments/Patho-Histo/MELC_Col4/")
 path1 <- path_file_MELC_Col4
 fov_to_tif_selected <- fov_to_tif[c(2,14,17)]
-
+fov_to_tif_selected <- fov_to_tif[15]
 
 for (i in seq_along(rev(fov_to_tif_selected))) {
   fov_tif <- fov_to_tif_selected[i]
@@ -225,7 +225,15 @@ remove_format <- theme(legend.position = "none",
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank()
         )
-
+remove_format_with_legend <- theme(legend.position = "right",
+                          axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()
+        )
   
 CD163 <- all_dat %>% filter(SourceID==names(fov_to_tif_selected)[i])  %>% 
   ggplot() +
@@ -239,7 +247,7 @@ all <- all_dat %>% filter(SourceID==names(fov_to_tif_selected)[i])  %>%
   #facet_wrap(vars(SourceID))+
   geom_raster(data = colla_4, aes_string(x="x", y="y", alpha="intens_io" )) +
    geom_point(aes(x_coord,y_coord, color=dist_to_coll4_grouped_all_7), size=3)+
- coord_fixed() + remove_format +scale_color_manual(values=rev(wes_palette("Cavalcanti1")[c(4,5,1)])) #4,1,5  #out,in,adj
+ coord_fixed() +theme_bw()+ remove_format_with_legend +scale_color_manual(values=rev(wes_palette("Cavalcanti1")[c(4,5,1)])) #4,1,5  #out,in,adj
 
 p1 <- CD163+all+ggtitle("fov_tif")
 
@@ -254,7 +262,21 @@ print(p1) %>% return()
 break()
 }
 
+colla_4 <- raster(paste0(path1,fov_tif ))
+colla_4 <- as(colla_4, "SpatialPixelsDataFrame")
+colla_4 <- as.data.frame(colla_4)
+colnames(colla_4) <- c("intens", "x", "y")
+colla_4 <- colla_4 %>% 
+  mutate(intens=ifelse(intens>50,50,intens))
 
+CD163 <- all_dat %>% filter(SourceID==names(fov_to_tif_selected)[i])  %>% 
+  ggplot() +
+  geom_raster(data = colla_4, aes_string(x="x", y="y", alpha="intens" )) +
+   geom_point(aes(x_coord,y_coord, color=CD163_oli), size=3)+
+    coord_fixed() +scale_color_manual(values=c("CD163_pos"="purple","CD163_neg"="darkred"))+theme_bw()
+CD163
+
+ggsave(plot=CD163,filename = "..\\output\\12-2023_manteltext\\CD163.svg" )
 ```
 ### umap
 ```{r}
