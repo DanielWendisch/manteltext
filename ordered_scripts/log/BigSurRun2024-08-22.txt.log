@@ -1,0 +1,75 @@
+=========================================================================
+Log Path:
+C:/Users/Danne/R_projects/manteltext/ordered_scripts/log/BigSurRun2024-08-22.txt.log
+Program Path:
+C:/Users/Danne/R_projects/manteltext/ordered_scripts/schulte-schrepping_integration_check.qmd
+Working Directory: C:/Users/Danne/R_projects/manteltext/ordered_scripts
+User Name: Danne
+R Version: 4.4.1 (2024-06-14 ucrt)
+Machine: DESKTOP-ADLEJL2 x86-64
+Operating System: Windows 10 x64 build 19045
+Base Packages: stats4 stats graphics grDevices utils datasets methods base
+Other Packages: Rmpfr_0.9-5 gmp_0.7-4 BigSur_1.0.1 extrafont_0.19
+SeuratWrappers_0.3.5 tidyseurat_0.8.0 ttservice_0.4.1 BPCells_0.2.0
+ggrepel_0.9.5 lubridate_1.9.3 forcats_1.0.0 stringr_1.5.1 dplyr_1.1.4
+purrr_1.0.2 readr_2.1.5 tidyr_1.3.1 tibble_3.2.1 ggplot2_3.5.1 tidyverse_2.0.0
+textTinyR_1.1.8 Matrix_1.7-0 Seurat_5.1.0 SeuratObject_5.0.2 sp_2.1-4
+DESeq2_1.44.0 SummarizedExperiment_1.34.0 Biobase_2.64.0 MatrixGenerics_1.16.0
+matrixStats_1.3.0 GenomicRanges_1.56.1 GenomeInfoDb_1.40.1 IRanges_2.38.1
+S4Vectors_0.42.1 BiocGenerics_0.50.0
+Log Start Time: 2024-08-22 05:05:25.062803
+=========================================================================
+
+Pipeline started execution.
+
+NOTE: Log Print Time:  2024-08-22 05:05:25.068445
+NOTE: Elapsed Time: 0.00458288192749023 secs
+
+Modified corrected Pearson residuals calculated.
+
+NOTE: Log Print Time:  2024-08-22 05:05:30.008169
+NOTE: Elapsed Time: 4.93972396850586 secs
+
+Modified corrected Fano factors calculated.
+
+NOTE: Log Print Time:  2024-08-22 05:05:30.115747
+NOTE: Elapsed Time: 0.107578039169312 secs
+
+Beginning correlation calculation.
+
+NOTE: Log Print Time:  2024-08-22 05:05:30.117392
+NOTE: Elapsed Time: 0.00164508819580078 secs
+
+Modified-corrected Pearson Correlation Coefficients calculated.
+
+NOTE: Log Print Time:  2024-08-22 05:07:33.309878
+NOTE: Elapsed Time: 2.05320810079575 mins
+
+Inverse sqrt moments calculated.
+
+NOTE: Log Print Time:  2024-08-22 05:13:55.524153
+NOTE: Elapsed Time: 6.37023791472117 mins
+
+PCC cumulants calculated.
+
+NOTE: Log Print Time:  2024-08-22 09:58:15.711455
+NOTE: Elapsed Time: 4.73894091725349 hours
+
+PCC Cornish Fisher coefficients calculated.
+
+NOTE: Log Print Time:  2024-08-22 10:06:54.366569
+NOTE: Elapsed Time: 8.64425189892451 mins
+
+Error : object 'mnn_umap_dotplot' not found
+Traceback:
+6: ifelse(x[1] * x[2] < 0, F, T)
+5: FUN(newX[, i], ...)
+4: apply(cut.vec, 1, function(x) ifelse(x[1] * x[2] < 0, F, T))
+3: QuickTest6CF(cmatrix, first.pass.cutoff)
+2: CF.PCC.Roots(cor.coefficients, 2, residuals$gene.totals)
+1: BigSur(example.seurat.subset, variable.features = F, correlations = T, 
+       depthlist = depths)
+
+NOTE: Log Print Time:  2024-08-22 16:17:47.825494
+NOTE: Elapsed Time: 6.18151636805799 hours
+

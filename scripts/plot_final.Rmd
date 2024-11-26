@@ -23,24 +23,28 @@ library(ggridges)
 library(tidyseurat)
 library(ggpubr)
 library(rstatix)
+```
 
+
+```{r message=FALSE, warning=FALSE}
 source("functions_bal_macrophages.R")
 source("initialize_bal_data.R")
 source("loo_module_score_dotplots.R")
 source("fibrosis_datasets_effect_size_calc.R")
 library(ggrepel)
 library(rcartocolor)
-
 size_ <- 6
 ```
 
 
 ```{r}
+setwd("C:/Users/Danne/R_projects/manteltext/scripts")
 path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
-path_output_file <- ".\\output\\"
+path_output_file <- "..\\output\\"
 seurat_monocytes <-  read_rds(paste0(path_data_file,
                                      "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
 Idents(seurat_monocytes) <- "cluster_clean"
+
 ```
 
 ```{r}
@@ -61,6 +65,23 @@ cols_severity <- c("mild"=my_scale[2],
                 "severe"="#dc322f",
                 "control"="grey")
 
+```
+```{r}
+library(ggdark)
+dark_theme_bw()
+theme_defense <-   theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")
+
+
+
+theme_defense_dark <- theme_defense + dark_theme_bw()
 ```
 
 ```{r}
@@ -95,6 +116,34 @@ ggsave(monocyte_umaps, filename = paste0("..\\output\\plots\\","monocyte_umaps.s
 
 ggsave(p_dimplot_mono_cluster, filename = paste0("..\\output\\plots\\","p_dimplot_mono_cluster.svg") )
 ```
+```{r verteidiung 1}
+
+p_dimplot_mono_cluster_verteidigung <- dimplot_mono_cluster %>%
+ # slice_sample(n=100) %>% 
+  ggplot(aes(UMAP_1,UMAP_2, color=cluster_clean))+
+  geom_point(size=1.1, alpha=0.5, shape=16)+
+  theme_defense_dark+
+  scale_color_manual(values=cols_cluster_clean)+
+  xlim(c(2,15))
+
+p_dimplot_mono_severity_verteidigung <- dimplot_mono_severity %>% 
+  arrange(desc(group_per_sample)) %>%
+  ggplot(aes(UMAP_1,UMAP_2, color=group_per_sample)) + 
+  geom_point(alpha=0.1, shape=16)+
+  geom_density_2d(bins=15,
+                  #linejoin = "bevel",
+                  size=1 )+
+  theme_defense_dark+
+  scale_color_manual(values=cols_severity)+xlim(c(2,15))
+
+
+p_dimplot_mono_cluster_verteidigung
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_cluster.png") , bg='transparent', dpi=800)
+p_dimplot_mono_severity_verteidigung
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_severity_density.png") , bg='transparent', dpi=800)
+```
+
+
 # CD163 appears to be high in classical because of
 ```{r}
 seurat_monocytes$donor_cluster <- paste((seurat_monocytes$donor), seurat_monocytes$cluster_clean, sep = ".")
@@ -217,7 +266,7 @@ markers_final<- FindAllMarkers(seurat_monocytes_clean,
 
 #scale_color_carto_c
 
-schulteschrepping_dotplot <- final_markers%>% 
+schulteschrepping_dotplot <- markers_final%>% 
 #seurat_monocytes_markers %>% 
   # mutate(gene=str_replace_all(gene,"-", ""))%>%
   #   mutate(pct.1=ifelse(gene=="HLADRA",2,pct.1)) %>% 
@@ -244,7 +293,50 @@ schulteschrepping_dotplot +coord_flip()
 ggsave(schulteschrepping_dotplot +coord_flip()+theme(legend.position = "none"), filename = paste0("..\\output\\plots\\","schulteschrepping_dotplot_flipped.svg"), width=5, height=2.5)
 ggsave(schulteschrepping_dotplot +coord_flip(), filename = paste0("..\\output\\plots\\","schulteschrepping_dotplot_flipped_big.svg"), width=10, height=5)
 
-getwd()
+
+```
+```{r}
+markers_verteidigung <-  c(
+  "CD14","FCGR3A", 
+  "IFI27","IFI44L",
+  "IRF1","IL1B", "CD83",
+  "S100A8", "S100A9", "S100A12",
+  "HLA-DRA", "HLA-DRB1"
+  )
+
+schulteschrepping_dotplot_verteidigung <- markers_final%>% 
+  mutate(avg_log2FC=case_when(
+    avg_log2FC>=2~2,
+    avg_log2FC<=(-2)~(-2),
+    TRUE~avg_log2FC))|> 
+  filter(gene %in% markers_verteidigung) %>% 
+  mutate(gene=factor(gene,
+                     levels =markers_verteidigung ),
+         cluster=factor(cluster, levels=c("hla_d_rlo_s100a_monocytes",
+                                          "hla_d_rhi_cd83_monocytes",
+                                          "classical_monocytes",
+                                          "non_classical_monocytes" ))) %>% 
+ ggplot(aes(cluster, gene,size=pct.1,
+             color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+          scale_color_carto_c(name = "mean log2FC: ",
+                           type = "diverging",
+                           palette = "Geyser",
+                           direction = 1)+
+            scale_size(range = c(1, 15), name = "% expressed")
+
+schulteschrepping_dotplot_verteidigung+
+  theme_defense_dark+
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 60, hjust=1, face = "bold",size=12)
+        )+
+  scale_y_discrete(labels=str_replace_all(markers_verteidigung,
+                                          pattern = "FCGR3A", "FCGR3A (CD16)"))+
+  scale_x_discrete(labels=rep("",4))
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_dotplot_verteidigung.png") , bg='transparent', dpi=800)
+
 ```
 
 
@@ -382,24 +474,64 @@ AM1_vs_AM2_markers %>% arrange(-avg_log2FC)
 
 ```{r warning=FALSE}
 
-umap_plot <- DimPlot(BAL_macrophages )
+umap_plot <- DimPlot(BAL_macrophages, reduction = "umap", )
 
-umap_plot <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_point(aes(alpha=0.2))+
-  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)
+umap_plot <- umap_plot$data %>% ggplot(aes(UMAP_1, UMAP_2, color = ident)) + geom_point(aes(alpha =
+                                                                                              0.2)) +
+  theme(legend.position = "none")  + theme_2 +  ggplot2::scale_color_manual(values = color.cluster)
 umap_plot
-markers_cluster_tbl <-  read_rds("../data/markers_cluster_tbl.rds")
-manuallly_sel_2groups <- c("ITGAM", "CD14", "CCR1", "CSF1R","FABP4","INHBA","FFAR4",  "PPARG", "PCOLCE2")
+#markers_cluster_tbl <-  read_rds("../intermediate_data/markers_cluster_tbl.rds")
+manuallly_sel_2groups <- c("ITGAM",
+                           "CD14",
+                           "CCR1",
+                           "CSF1R",
+                           "FABP4",
+                           "INHBA",
+                           "FFAR4",
+                           "PPARG",
+                           "PCOLCE2")
 
-top_markers_cluster <- markers_cluster_tbl %>% mutate(clus=factor(clus, levels = cluster_names))%>%group_by(clus) %>% slice_max(summary.AUC,n= 5)%>% arrange(.by_group = ) %>%  pull(gene) %>% unique()
-dot_plot <- dot_plot_cluster(unique(c(manuallly_sel_2groups, top_markers_cluster)))+theme(legend.position = "none", axis.text.x = element_text(size_),axis.text.y = element_text(size_))
-a1 <- umap_plot + dot_plot+plot_annotation(tag_levels = 'A') & 
-  theme(plot.tag = element_text(size = 8))+theme_minimal()
+markers_cluster_tbl <- FindAllMarkers(BAL_macrophages) |> as_tibble() |> mutate(gene =
+                                                                                  genifiy_2(gene))
+
+if (!file.exists("../intermediate_data/markers_cluster_tbl.rds")) {
+  markers_cluster_tbl <- FindAllMarkers(BAL_macrophages,
+                                      test.use = "roc",
+                                      max.cells.per.ident = 200) |> as_tibble() |> mutate(gene = genifiy_2(gene))
+  markers_cluster_tbl <- 
+  write_rds(
+    markers_cluster_tbl,"../intermediate_data/markers_cluster_tbl.rds"
+
+  )
+  
+}
+#markers_cluster_tbl <-  read_rds("../intermediate_data/markers_cluster_tbl.rds")
+
+
+top_markers_cluster <- markers_cluster_tbl %>% mutate(clus = factor(cluster, levels = cluster_names)) %>%
+  group_by(clus) %>% slice_max(summary.AUC, n = 5) %>% arrange(.by_group =) %>%  pull(gene) %>% unique()
+
+
+dot_plot <- dot_plot_cluster(unique(c(
+  manuallly_sel_2groups#, top_markers_cluster
+))) + theme(
+  legend.position = "none",
+  axis.text.x = element_text(size_),
+  axis.text.y = element_text(size_)
+)
+
+a1 <- umap_plot + dot_plot + plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(size = 8)) + theme_minimal()
 
 a1
 
-ggsave2(plot = umap_plot+theme_minimal(),filename = "../output/BAL_umap.tiff")
+ggsave2(plot = umap_plot + theme_minimal(), filename = "../output/BAL_umap.tiff")
 
-ggsave(plot = umap_plot+theme_minimal(),"../output/plots/bal_umap.tiff", height = 5)
+ggsave(
+  plot = umap_plot + theme_minimal(),
+  "../output/plots/bal_umap.tiff",
+  height = 5
+)
 
 ```
 
@@ -489,7 +621,8 @@ pc1_pc2
 
 
 ```{r warning=FALSE}
-umap_plot_flipped
+#umap_plot_flipped
+
 umap_plot_flipped <- (umap_plot %+% (umap_plot$data %>% as_tibble() %>% mutate(UMAP_1=-UMAP_1,UMAP_2=-UMAP_2)))+theme_minimal()
 
 ############# gene loadings
@@ -963,7 +1096,7 @@ avg_exp <- AverageExpression(object = BAL_macrophages,group.by = "Cluster"#, add
 avg_exp$RNA %>% as_tibble(rownames = "gene") %>%
   mutate(gene=genifiy_2(gene)) %>% slice_max(Monocytes, n=500) %>% 
   mutate(is_s100a8= if_else(gene=="S100A8","S100A8", "rest")) %>% 
-  ggplot(aes(fct_reorder(gene, -Monocytes),Monocytes, color=is_s100a8))+ geom_col()
+  ggplot(aes(fct_reorder(gene, -Monocytes),Monocytes, fill=is_s100a8))+ geom_col()
 
 avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
   mutate(gene=genifiy_2(gene)) %>% 

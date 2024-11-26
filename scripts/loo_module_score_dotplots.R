@@ -1,10 +1,17 @@
 
 library(effsize)
-print("hallo")
-if(!"scores_loo_corr.rds" %in% list.files("C:/Users/danne/R_projects/manteltext_git/data/")){
+print("start leave one out module score scropt")
 
-if (!("scores_loo_corr.rds" %in% (list.files("data/")))) {
+
+###
+### only recalulate if files doesn't exist yet
+if(!"scores_loo_corr.rds" %in% list.files("C:/Users/Danne/R_projects/manteltext_git/intermediate_data/")){
+  print("not in abolute path, recalculate scores_loo_corr")
+  print(getwd())
+
+if (!("scores_loo_corr.rds" %in% (list.files("../intermediate_data/")))) {
   #construct list of genestes leaving out one gene each
+  print("not in realtive path, recalculate scores_loo_corr")
 
 Reyf_MCluster1 <- list()
 Reyf_MCluster1[["full"]] <- genesets_fibrosis$Reyf_MCluster1
@@ -38,7 +45,6 @@ for (i in seq_along(Mors_1_SPP_fib[["full"]])) {
   
 }
 
-
 #takes loooookg!
 #compute all module score scores of the leave one out genesets
 #lo_corr means "leave one out corrrected"
@@ -59,20 +65,40 @@ BAL_macrophages <- add_named_module_score_ctrl_corrected(BAL_macrophages,
                                                          genesets_list_named = lapply(Mors_1_SPP_fib, function(x){ensemblizer(x)}) )
 
 #extract scores from SEurat object
-scores_reyf_clus1_loo_corr <- BAL_macrophages@meta.data[, which(
-  stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "Reyf_MCluster1_lo_corr")
+scores_reyf_clus1_loo_corr <- BAL_macrophages@meta.intermediate_data[, which(
+  stringr::str_detect(string = names(BAL_macrophages@meta.intermediate_data), pattern = "Reyf_MCluster1_lo_corr")
 )]
 
-scores_loo_corr <- BAL_macrophages@meta.data[, which(
-  stringr::str_detect(string = names(BAL_macrophages@meta.data), pattern = "lo_corr")
+scores_loo_corr <- BAL_macrophages@meta.intermediate_data[, which(
+  stringr::str_detect(string = names(BAL_macrophages@meta.intermediate_data), pattern = "lo_corr")
 )]
 
 
 
-saveRDS(scores_loo_corr,"data/scores_loo_corr.rds")
+saveRDS(scores_loo_corr,"intermediate_data/scores_loo_corr.rds")
 }
-}
+}else("no calculation, loading files")
+
 ####calculate reduction of abolute scores, probably not so intersting because change of other clusters unkown
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # reyf_clus1_loo_corr<- donor_clus_avg_scores_reyf_clus1_loo_corr %>% filter(Cluster=="CD163LGMNM") %>% group_by(Geneset) %>% summarise(avg_score=mean(Score), stdev=sd(Score)) %>% arrange(avg_score)
 # ref_ <- reyf_clus1_loo_corr %>% filter(str_detect(Geneset,"full")) %>% pull(avg_score)
@@ -81,12 +107,12 @@ saveRDS(scores_loo_corr,"data/scores_loo_corr.rds")
 # reyf_clus1_loo_corr %>% mutate(Geneset=str_remove_all(Geneset,pattern="Reyf_Clus1_w_o_")) %>% ggplot(aes(fct_reorder(Geneset,avg_score_diff),avg_score_diff))+ geom_col()+theme(axis.text.x=element_text(angle = 90))  +coord_flip()
 # reyf_clus1_loo_corr
 
-scores_loo_corr <- read_rds("C:/Users/danne/R_projects/manteltext_git/data/scores_loo_corr.rds")
+scores_loo_corr <- read_rds("C:/Users/Danne/R_projects/manteltext/intermediate_data/scores_loo_corr.rds")
 
 # #calculate mean score
 # donor_clus_avg_scores_reyf_clus1_loo_corr <- scores_reyf_clus1_loo_corr %>%  mutate(
-#             Cluster= as_factor(BAL_macrophages@meta.data$Cluster),
-#             donor=as_factor(BAL_macrophages@meta.data$patient)) %>%
+#             Cluster= as_factor(BAL_macrophages@meta.intermediate_data$Cluster),
+#             donor=as_factor(BAL_macrophages@meta.intermediate_data$patient)) %>%
 #     pivot_longer(cols = contains("Reyf_MCluster1_lo_corr"),names_to = "Geneset", values_to = "Score") %>% 
 #   group_by(Cluster,donor, Geneset) %>% summarise(Score=mean(Score))%>% 
 #   mutate(Cluster= factor(Cluster, levels=cluster_names))

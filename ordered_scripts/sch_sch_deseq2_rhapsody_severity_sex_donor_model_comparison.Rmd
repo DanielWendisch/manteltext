@@ -1,0 +1,563 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+Monocyte scRNAseq data from the Berlin cohort of Schulte-Schrepping et al is loaded as a Seurat object.
+Gene counts are summed by groups specified by severity_donor_experiment_sex_day
+only samples consisting of more than 200 cells are take into the analyisis
+
+
+
+ThSruat object of monocytes in the 
+
+```{r message=FALSE, warning=FALSE}
+library(DESeq2)
+library(Seurat)
+library("textTinyR")
+library(tidyverse)
+library(ggrepel)
+library(tidyseurat)
+```
+
+
+```{r function}
+
+make_idents_counts <- function(
+    ds,
+    idents_choose="seurat_clusters",
+    assay_="RNA",
+    slot_="counts",
+    min_cell_num=100){
+        
+        Idents(ds) <- idents_choose
+        group_names <- unique(Idents(ds))
+        reads <- slot(ds, "assays")[[assay_]] %>% slot(slot_)
+        reads <- reads[rownames(reads) %>% str_subset(pattern = "[.]",negate = T),]
+        sum_counts_ds <- tibble(.rows =  nrow(reads))
+        #z=1
+        for (i in seq_along(group_names)) {
+          #print(colnames(sum_counts_ds))
+          print(i)
+          i_cells <- WhichCells(object =ds,idents = group_names[i])
+          if (length(i_cells)<min_cell_num) {
+            sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=0)
+          colnames(sum_counts_ds)[i] <- paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num))
+          # print(paste0(as.character(group_names[i]),"_smaller" , as.character(min_cell_num)))
+          # print(i)
+            
+            #if (z==2) (return(sum_counts_ds))
+          #z=z+1
+          next}
+          #i_cells <- WhichCells(object =ds,idents = "hla_d_rlo_s100a_monocytes_C19-CB-0003")
+          sum_counts_ds <- sum_counts_ds %>%
+            add_column(dings=reads[,i_cells] %>%  sparse_Sums(rowSums=T))
+          colnames(sum_counts_ds)[i] <- as.character(group_names[i])
+          #print(as.character(colnames(sum_counts_ds)[i]))
+          
+        }
+        #colnames(sum_counts_ds) <- group_names
+        sum_counts_ds <- sum_counts_ds %>%  mutate(gene=rownames(reads)) %>% relocate(gene)
+        return(sum_counts_ds)
+}
+
+
+vulcano_plot_highlight_fc_p <- function(table,log2fc_thresh=1, padj_tresh=0.05){
+  res_highlight <- table%>% 
+   mutate(highlight=ifelse((abs(log2FoldChange)>log2fc_thresh) & (padj<padj_tresh), "highlight", "not")) %>% 
+    # mutate(highlight=ifelse(gene %in% c("MAF>1B"), "sig", "not")) %>% 
+  arrange(desc(highlight)) |> arrange(highlight)
+  
+  plot <- res_highlight %>% 
+    ggplot(aes(log2FoldChange, -log(padj))) + 
+  geom_point(aes(color=highlight), alpha=0.5)+ 
+  scale_color_manual(values = c("highlight"="red", "not"= "black", "outlier"="blue"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(res_highlight, highlight!= "not"),
+                 aes(log2FoldChange, -log(padj),label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw() 
+  return(plot)
+  
+  
+}
+
+vulcano_plot_highlight_genes <- function(table,genes){
+  res_highlight <- table%>% 
+   mutate(highlight=ifelse(gene %in% genes, "highlight", "not")) %>% 
+    # mutate(highlight=ifelse(gene %in% c("MAF>1B"), "sig", "not")) %>% 
+  arrange(desc(highlight)) |> arrange(highlight)
+  
+  plot <- res_highlight %>% 
+    ggplot(aes(log2FoldChange, -log(padj))) + 
+  geom_point(aes(color=highlight), alpha=0.5)+ 
+  scale_color_manual(values = c("highlight"="red", "not"= "grey20", "outlier"="blue"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(res_highlight, highlight!= "not"),
+                 aes(log2FoldChange, -log(padj),label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)+
+    geom_point(data=filter(res_highlight, highlight!= "not"),aes(color=highlight), color="red")+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw() 
+  return(plot)
+  
+  
+}
+
+# res_highlight <- mild_vs_severe%>% 
+#    mutate(highlight=ifelse(gene %in% c("S100A9","S100A12","S100A8", "CD83", "HLA-DRA","IFI44L","CCL2", "CCL3", "IL1B", "CD1C", "THBD", "ERAP2", "HLA-type2"), "highlight", "not"))
+```
+
+```{r paths}
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\Schulte-Schrepping_2020_COVID19_Rhapsody_Monocytes\\"
+
+
+path_output_file <- "..\\output\\"
+```
+
+```{r }
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "seurat_COVID19_monocytes_jonas_FG_2020-07-29.rds"))
+
+seurat_monocytes = UpdateSeuratObject(object = seurat_monocytes)
+```
+
+```{r}
+seurat_monocytes |> pull(group_per_sample) |> table()
+seurat_monocytes |> pull(experiment) |> table()
+seurat_monocytes |> pull(donor) |> table()
+seurat_monocytes |> pull(sex) |> table()
+seurat_monocytes |> pull(days_after_onset) |> table()
+
+```
+
+```{r }
+seurat_monocytes <- seurat_monocytes |> filter(group_per_sample !="control")
+
+#seurat_monocytes$cluster_donor <- paste0(seurat_monocytes$cluster_clean, "__",seurat_monocytes$donor)
+#tibble(cluster=seurat_monocytes$cluster_clean,donor=seurat_monocytes$donor ) %>% group_by(cluster,donor) %>% summarise(n=n()) %>% filter(n>49)
+
+seurat_monocytes$severity_donor_experiment_sex_day <- paste0(seurat_monocytes$group_per_sample, "__",
+                                                        seurat_monocytes$donor, "__",
+                                                        seurat_monocytes$experiment,"__",
+                                                        seurat_monocytes$sex,"__",
+                                                        seurat_monocytes$days_after_onset
+                                                        )
+
+ds_monocytes <-  make_idents_counts(seurat_monocytes, idents_choose = "severity_donor_experiment_sex_day",min_cell_num = 200)
+#ds_monocytes %>% write_rds( paste0(path_output_file,"bulk_sums_monocytes.rds") )
+```
+
+These are the samples that are included
+```{r }
+ds_monocytes %>% select(!(contains("_smaller"))) |> colnames()
+```
+
+Some severe female samples are filtered out
+```{r }
+ds_monocytes %>% select(contains("_smaller")) |> colnames()
+```
+
+```{r}
+n_tbl <- tibble( 
+               donor=seurat_monocytes$donor, 
+               experiment=seurat_monocytes$experiment,
+               sex=seurat_monocytes$sex,
+               severity=seurat_monocytes$group_per_sample,
+               day_pso=seurat_monocytes$days_after_onset
+               ) %>%
+  group_by(donor,experiment,sex, severity,day_pso) %>% 
+  summarise(n=n()) %>%  mutate(keep=paste0(severity,"__",
+                     donor,"__",
+                     experiment,"__",
+                     sex,"__",
+                     day_pso
+                     )) |> 
+  ungroup()
+n_tbl |> arrange(desc(n))
+```
+
+
+```{r}
+n_tbl |> filter(severity=="severe", sex =="F")
+```
+
+
+```{r}
+x <- ds_monocytes %>% select(!(contains("_smaller")))
+
+expression_matrix <- as.matrix(x %>% select(-gene)) 
+rownames(expression_matrix) <- x %>% pull(gene)
+colnames(expression_matrix)
+```
+
+
+```{r}
+design_x <-colnames(expression_matrix)%>% 
+  tibble(dings=.) %>% separate(col= dings,into = c("severity","donor", "experiment", "sex", "day"),sep = "__") %>%
+  mutate_all(as_factor) |>
+  mutate(day=as.double(as.character(day)))
+design_x |> arrange(severity)
+
+```
+```{r}
+design_x |> ggplot(aes(day,severity, color=sex))+geom_jitter()
+```
+dazsp past syptom onset seems off
+
+```{r}
+design_x$donor[design_x$donor |> duplicated()]
+```
+
+```{r}
+design_x |> filter(donor %in% c("C19-CB-0001",
+                                "C19-CB-0003",
+                                "C19-CB-0002",
+                                "C19-CB-0005"
+                                ))
+```
+
+```{r }
+
+res_sev_day_sex<- DESeqDataSetFromMatrix(expression_matrix,
+                              colData=design_x,
+                              design= ~ 
+                                severity +
+                                day+
+                                sex +
+                              #donor +
+                              experiment
+                             ) %>% DESeq()
+
+res_sev_sex<- DESeqDataSetFromMatrix(expression_matrix,
+                              colData=design_x,
+                              design= ~ 
+                                severity +
+                                sex +
+                                experiment
+                             ) %>% DESeq()
+  
+
+res_day_sex <- DESeqDataSetFromMatrix(expression_matrix,
+                              colData=design_x,
+                              design= ~
+                                day +
+                                sex +
+                                experiment
+                             ) %>%  DESeq()
+
+resultsNames(res_sev_day_sex)
+```
+
+```{r}
+mild_vs_severe_sev_day_sex <- results(res_sev_day_sex,contrast = c("severity","mild","severe")) |> as_tibble(rownames="gene")
+mild_vs_severe_sev_sex <- results(res_sev_sex,contrast = c("severity","mild","severe")) |> as_tibble(rownames="gene")
+day_sev_sex <- results(res_sev_day_sex, name="day")|> as_tibble(rownames="gene")
+
+day_sex <- results(res_day_sex, name="day")|> as_tibble(rownames="gene")
+
+
+shrink_mild_vs_severe_sev_day_sex <- lfcShrink(dds = res_sev_day_sex,
+          coef="severity_severe_vs_mild")|> as_tibble(rownames="gene")
+
+shrink_mild_vs_severe_sev_sex <- lfcShrink(dds = res_sev_sex,
+          coef="severity_severe_vs_mild")|> as_tibble(rownames="gene")
+
+shrink_day_sev_sex <- lfcShrink(dds = res_sev_day_sex,
+          coef="day")|> as_tibble(rownames="gene")
+
+shrink_day_sex <- lfcShrink(dds = res_sev_day_sex,
+          coef="day")|> as_tibble(rownames="gene")
+```
+```{r}
+shrink_mild_vs_severe_sev_day_sex |> filter(gene %in% c("NRROS", "CIITA", "TGFB1", "TGFB2", "TGFB3", "VPS53", "TGIF1"))
+```
+
+```{r}
+#| label: mild vs severe
+#| fig-width: 16
+#| fig-height: 10
+
+vulcano_plot_highlight_fc_p(mild_vs_severe_sev_sex,1,0.05)+ggtitle("<--- severe vs. mild- ---> (design: severity+sex)")
+vulcano_plot_highlight_fc_p(mild_vs_severe_sev_day_sex,1,0.05)+ggtitle("<--- severe vs. mild- ---> (design: severity+sex+day)")
+shrink_mild_vs_severe_sev_day_sex |> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_fc_p(1,0.05)+
+  ggtitle("shrinkage estimated<--- severe vs. mild- ---> (design: severity+sex+day)")
+shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_fc_p(1,0.05)+
+  ggtitle("shrinkage estimated<--- severe vs. mild- ---> (design: severity+sex)")
+
+shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_fc_p(1,0.05)+
+  ggtitle("shrinkage estimated<--- severe vs. mild- ---> (design: severity+sex)")+xlim(2,8)
+
+shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_fc_p(1,0.05)+
+  ggtitle("shrinkage estimated<--- severe vs. mild- ---> (design: severity+sex)")+xlim(2,3)+ylim(0,60)
+```
+
+
+```{r}
+
+hlas <- shrink_mild_vs_severe_sev_day_sex |> filter(str_detect(gene ,pattern = "HLA-D")) |> pull(gene)
+
+shrink_mild_vs_severe_sev_day_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_genes(genes = c("CIITA", "S100A8", "S100A9", "S100A12", "CD83", "SIGLEC1", hlas))
+
+shrink_mild_vs_severe_sev_day_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_genes(genes = c("CIITA", hlas))
+
+
+shrink_mild_vs_severe_sev_day_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> vulcano_plot_highlight_genes(genes = c("CIITA", "IL1B", "IL12A", "IL12B", "TNF", "IL6","IL1A", "SELL", "ITGAL"))
+```
+
+```{r}
+day_sev_day_sex <- results(res_sev_day_sex,name = "day") |> as_tibble(rownames="gene")
+```
+
+```{r}
+#| label: day_sev_day_sex
+#| fig-width: 16
+#| fig-height: 10
+
+
+vulcano_plot_highlight_fc_p(day_sev_day_sex,0.3,0.05)+ggtitle(" day- ---> (design: severity+sex+day)")
+vulcano_plot_highlight_fc_p(day_sex,0.3,0.05)+ggtitle("day- ---> (design: sex+day)")
+
+```
+
+```{r}
+#| label: day
+#| fig-width: 16
+#| fig-height: 10
+
+
+day_sev_sex|> vulcano_plot_highlight_fc_p(0.2,0.1)+ggtitle("day, sev+sex")
+shrink_day_sev_sex |> vulcano_plot_highlight_fc_p(0.2,0.1)+ggtitle("shrinkage estimate, day, sev+sex")
+shrink_day_sex |> vulcano_plot_highlight_fc_p(0.2,0.1)+ggtitle("shrinkage estimate, day, sex")
+
+```
+
+
+```{r}
+mild_vs_severe_sev_sex |>
+  filter(gene %in% c("CIITA", "S100A9", "CD83", "CCL8")) |> 
+  mutate(fc_lower=log2FoldChange-lfcSE,
+         fc_upper=log2FoldChange+lfcSE) |> 
+  pivot_longer(cols = c("log2FoldChange", "fc_lower", "fc_upper")) |> 
+
+  ggplot(aes(value, gene))+
+  geom_point()
+
+
+mild_vs_severe_sev_day_sex |>
+  filter(gene %in% c("CIITA", "S100A9", "CD83", "CCL8")) |> 
+  mutate(fc_lower=log2FoldChange-lfcSE,
+         fc_upper=log2FoldChange+lfcSE) |> 
+  pivot_longer(cols = c("log2FoldChange", "fc_lower", "fc_upper")) |> 
+
+  ggplot(aes(value, gene))+
+  geom_point()
+
+
+mild_vs_severe_sev_sex |> mutate(model="sev_sex") |> 
+  bind_rows(mild_vs_severe_sev_day_sex |> mutate(model="sev_day_sex") )   |> 
+  bind_rows(shrink_mild_vs_severe_sev_day_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> mutate(model="shrink_sev_day_sex")) |> 
+  bind_rows(shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> mutate(model="shrink_sev_sex")) |> 
+  filter(gene %in% c("CIITA", "S100A9","S100A8","S100A12","S100B", "S100P" ,"CD83", "CCL8", "SIGLEC1", "CD109", "CD163", "JUNB", "FOS", "FOSB", "HESX1", "AXL", "IL4I1", "ZBP1", "HBB", "OTOF", "DDX58", "NRP1", "MMP8", "IGKC", "CSF1", "CST7", "HOXA10")) |> 
+  group_by(model) |> 
+    mutate(fc_lower=log2FoldChange-lfcSE,
+         fc_upper=log2FoldChange+lfcSE) |> 
+  pivot_longer(cols = c("log2FoldChange", "fc_lower", "fc_upper"), values_to = "log2FC") |> 
+  ggplot(aes(log2FC, gene, color=model))+
+  geom_point(position=position_jitterdodge(jitter.height = 0.2, dodge.width = 0))
+
+dat <- mild_vs_severe_sev_sex |> mutate(model="sev_sex") |> 
+  bind_rows(mild_vs_severe_sev_day_sex |> mutate(model="sev_day_sex") )   |> 
+  bind_rows(shrink_mild_vs_severe_sev_day_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> mutate(model="shrink_sev_day_sex")) |> 
+  bind_rows(shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1)) |> mutate(model="shrink_sev_sex")) |> 
+  filter(gene %in% c("CIITA", "S100A9","S100A8","S100A12","S100B", "S100P" ,"CD83", "CCL8", "SIGLEC1", "CD109", "CD163", "JUNB", "FOS", "FOSB", "HESX1", "AXL", "IL4I1", "ZBP1", "HBB", "OTOF", "DDX58", "NRP1", "MMP8", "IGKC", "CSF1", "CST7", "HOXA10", "JUN", "UBALD2", "BRD3", "SERPINB10","DTFA4", "LTA", "IFIT1", "HLA-J", "RAB13")) |> 
+  group_by(model) |> 
+    mutate(fc_lower=log2FoldChange-lfcSE,
+         fc_upper=log2FoldChange+lfcSE) |> 
+  pivot_longer(cols = c("log2FoldChange", "fc_lower", "fc_upper"), values_to = "log2FC") |> 
+  mutate(gene=as.factor(gene)) 
+
+offset <- c(-0.1,-0.05,0, 0.05)
+names(offset) <- dat$model |> unique()
+
+dat <- dat |> 
+  mutate(y_offset =as.numeric(gene)+offset[model])
+
+dat |> 
+  ggplot(aes(log2FC, y_offset, color=model))+
+  geom_line(aes(group = interaction(model, gene)), size = 0.8)+
+  scale_y_continuous(breaks = 1:length(levels(dat$gene)), labels = levels(dat$gene)) +
+  geom_point(data = filter(dat,name=="log2FoldChange"), size = 1.3)
+
+
+
+```
+```{r}
+normalized_counts <- counts(res_sev_day_sex, 
+                            normalized = TRUE) |> as_tibble(rownames="gene")
+
+normalized_counts |> filter(gene %in% c("SIGLEC1", "S100B", "S100A9","S100A8", "S100A12" ,"CD163", "CIITA", "CSF1", "MMP8", "MMP2", "HBB", "FOS", "FOSB", "S100P", "OTOF", "IFIT1", "CLC", "LTF", "HLA-J", "RAB13")) |>
+  pivot_longer(cols = -gene, values_to = "norm_counts") |>
+  separate(name, into = c("severity",
+                         "donor",
+                         "exp",
+                         "sex",
+                         "day"), sep = "__") |> 
+  mutate(day=as.double(as.character(day))) |> 
+  ggplot(aes(day,norm_counts, color=severity, shape = sex)) +
+  geom_point()+facet_wrap(~gene, scales = "free")
+```
+
+
+```{r}
+normalized_counts |>
+  filter(gene %in% c("CD163", "HBB"))|>
+  pivot_longer(cols = -gene, values_to = "norm_counts") |>
+  separate(name, into = c("severity",
+                         "donor",
+                         "exp",
+                         "sex",
+                         "day"), sep = "__") |> 
+  mutate(day=as.double(as.character(day))) |> 
+  pivot_wider(names_from = gene, values_from = norm_counts) |> 
+  ggplot(aes(CD163, HBB, color=severity, shape = exp)) +
+  geom_point()
+```
+```{r}
+
+fc_dif <- shrink_mild_vs_severe_sev_day_sex |> mutate(log2FoldChange=log2FoldChange*(-1),model="shrink_sev_day_sex") |> 
+  bind_rows(shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1),model="shrink_sev_sex")) |> 
+  group_by(model) |> 
+  mutate(fc_in_SE=log2FoldChange/lfcSE) |> select(gene,fc_in_SE) |> 
+  pivot_wider(names_from = model, values_from = fc_in_SE, names_prefix = "fc_in_SE_") |> 
+  ungroup()
+
+fc_dif <- shrink_mild_vs_severe_sev_day_sex |>
+  select(gene,padj ,log2FoldChange) |> 
+  left_join(fc_dif) |> 
+  filter(padj<0.05) |> 
+  arrange(padj)|> 
+  mutate(fc_dif_in_SE=fc_in_SE_shrink_sev_day_sex-fc_in_SE_shrink_sev_sex)
+
+fc_dif  |> 
+  ggplot(aes(fc_dif_in_SE, -log10(padj)))+
+  geom_point()
+
+fc_dif <- fc_dif |> 
+  mutate(padj_fc_vorzeichen= if_else(log2FoldChange<0,-log10(padj), +log10(padj))) |> 
+  mutate(highlight=if_else(fc_dif_in_SE<0.5 , "highlight", "not"))
+
+
+fc_dif <- fc_dif |> 
+  mutate(padj_fc_vorzeichen= if_else(log2FoldChange<0,-log10(padj), +log10(padj))) |> 
+  mutate(highlight_2=if_else(fc_dif_in_SE>2 , "highlight", "not"))
+
+
+fc_dif <- fc_dif |> 
+  mutate(padj_fc_vorzeichen= if_else(log2FoldChange<0,-log10(padj), +log10(padj))) |> 
+  mutate(highlight_3=if_else(fc_dif_in_SE>2 , "highlight", "not"))
+
+
+fc_dif |> 
+  ggplot(aes(fc_dif_in_SE, padj_fc_vorzeichen, color=highlight))+
+  geom_point()+
+  scale_color_manual(values = c("highlight"="red", "not"= "black"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(fc_dif, highlight!= "not"),
+                 aes(fc_dif_in_SE, padj_fc_vorzeichen,label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw() 
+
+
+
+fc_dif |> 
+  ggplot(aes(fc_dif_in_SE, padj_fc_vorzeichen, color=highlight_2))+
+  geom_point()+
+  scale_color_manual(values = c("highlight"="red", "not"= "black"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(fc_dif, highlight_2!= "not"),
+                 aes(fc_dif_in_SE, padj_fc_vorzeichen,label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw() 
+
+
+fc_dif |> 
+  ggplot(aes(fc_dif_in_SE, padj_fc_vorzeichen, color=highlight_3))+
+  geom_point()+
+  scale_color_manual(values = c("highlight"="red", "not"= "black"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(fc_dif, highlight_3!= "not"),
+                 aes(fc_dif_in_SE, padj_fc_vorzeichen,label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw() 
+```
+```{r}
+fc_dif
+```
+# trying to compare models here
+
+```{r}
+fc_dif <- shrink_mild_vs_severe_sev_day_sex |> mutate(log2FoldChange=log2FoldChange*(-1),model="shrink_sev_day_sex") |> 
+  bind_rows(shrink_mild_vs_severe_sev_sex|> mutate(log2FoldChange=log2FoldChange*(-1),model="shrink_sev_sex")) |> 
+  #group_by(model) |> 
+  #mutate(fc_dif=log2FoldChange/lfcSE) |>
+  select(gene,log2FoldChange,model) |> 
+  pivot_wider(names_from = model, values_from = log2FoldChange, names_prefix = "log2FC_") |> 
+  ungroup() |> 
+  mutate(log2FoldChange_dif=log2FC_shrink_sev_day_sex-log2FC_shrink_sev_sex)
+```
+
+
+```{r}
+fc_dif <- shrink_mild_vs_severe_sev_day_sex |>
+  select(gene,padj ) |> 
+  left_join(fc_dif) |> 
+  filter(padj<0.05, abs(log2FC_shrink_sev_day_sex)>1) |> 
+  arrange(padj)|> 
+  mutate(padj_fc_vorzeichen= if_else(log2FC_shrink_sev_day_sex<0,-log10(padj), +log10(padj))) |> 
+  mutate(highlight=if_else(padj_fc_vorzeichen>(5), "highlight", "not")) |> 
+  mutate(highlight_spec=if_else(gene %in% c("OTOF"), "highlight", "not")) |> 
+  mutate(highlight_spec=if_else(log2FoldChange_dif<(-1.5), "highlight", "not"))|> 
+  mutate(highlight_spec=if_else(log2FoldChange_dif>(0.5), "highlight", "not"))
+  
+  
+
+fc_dif  |> 
+  ggplot(aes(log2FoldChange_dif, -log10(padj)))+
+  geom_point()
+
+
+fc_dif  |> 
+  ggplot(aes(log2FoldChange_dif, padj_fc_vorzeichen))+
+  geom_point()+
+  geom_label_repel(data = filter(fc_dif, highlight_spec!= "not"),
+                 aes(log2FoldChange_dif, padj_fc_vorzeichen,label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)
+```
+
+
+
+
+```{r}
+fc_dif |> 
+  ggplot(aes(log2FoldChange_dif, padj_fc_vorzeichen, color=highlight))+
+  geom_point()+
+  scale_color_manual(values = c("highlight"="red", "not"= "black"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(fc_dif, highlight!= "not"),
+                 aes(log2FoldChange_dif, padj_fc_vorzeichen,label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.5)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw()
+```
+
+
+
+

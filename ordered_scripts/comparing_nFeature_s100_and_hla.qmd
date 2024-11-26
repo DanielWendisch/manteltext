@@ -1,0 +1,79 @@
+---
+title: "comparing_s100_and_hla_nFeature"
+format: html
+editor: visual
+---
+
+
+```{r}
+tab1 <- seurat_monocytes |> select(sampleID,nFeature_RNA,nCount_RNA,days_after_onset, donor, origID, sampletag, disease_stage,cluster_clean ,group_per_sample) 
+
+dings <- tab1 |>filter(disease_stage !="control",cluster_clean %in% c("hla_d_rhi_cd83_monocytes",
+                                                                      "hla_d_rlo_s100a_monocytes")) |>  group_by(sampleID, cluster_clean) |>
+  mutate(features_per_count=nFeature_RNA/nCount_RNA) |> #nonsense for nonlinear relationship
+  summarise(mean_nFeature=mean(nFeature_RNA),                                                                                          mean_nCount=mean(nCount_RNA),
+            mean_features_per_count=mean(features_per_count)) 
+
+dings |> ggplot(aes(cluster_clean,mean_nFeature, colour = cluster_clean)) +geom_point() + geom_line(aes(group =sampleID ))+
+  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ylim(0,5000)
+
+
+dings |> ggplot(aes(cluster_clean,mean_nCount)) +geom_point() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ geom_line(aes(group =sampleID ))+ylim(0,17000)
+
+
+dings |> ggplot(aes(cluster_clean,mean_nCount)) +
+  geom_point() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  geom_line(aes(group =sampleID ))+ylim(0,17000)
+
+dings |>
+  ggplot(aes(cluster_clean,mean_nCount)) +
+  geom_point() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  geom_line(aes(group =sampleID ))+ylim(0,17000)
+
+# dings |>
+#   ggplot(aes(cluster_clean,mean_features_per_count)) +
+#   geom_point() + 
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+#   geom_line(aes(group =sampleID ))
+```
+```{r}
+tab1 |>filter(disease_stage !="control",cluster_clean %in% c("hla_d_rhi_cd83_monocytes",
+                                                                      "hla_d_rlo_s100a_monocytes")) |> ggplot(aes(log(nFeature_RNA),log(nCount_RNA), cluster_clean, colour = cluster_clean)) +geom_smooth() + facet_wrap(~ sampleID, scales = "free")
+```
+```{r}
+seurat_monocytes <- seurat_monocytes |> CellCycleScoring(s.features = cc.genes$s.genes, g2m.features = cc.genes$g2m.genes)
+
+seurat_monocytes |> DimPlot(group.by = "Phase")
+VlnPlot(object = seurat_monocytes,features = )
+
+VlnPlot(,
+        features = "G2M.Score",
+        group.by = "sampleID")
+
+seurat_monocytes|>filter(disease_stage !="control",cluster_clean %in% c("hla_d_rhi_cd83_monocytes",
+                                                                      "hla_d_rlo_s100a_monocytes")) |> group_by(sampleID, cluster_clean) |> summarise(mean_g2m=mean(G2M.Score)) |> ggplot(aes(cluster_clean,mean_g2m)) + geom_point()
+
+
+seurat_monocytes |>filter(disease_stage !="control",cluster_clean %in% c("hla_d_rhi_cd83_monocytes",
+                                                                      "hla_d_rlo_s100a_monocytes")) |> group_by(sampleID, cluster_clean) |> summarise(mean_S.Score=mean(S.Score)) |> ggplot(aes(cluster_clean,mean_S.Score)) + geom_point()
+```
+
+```{r}
+hlas <- tibble(gene=rownames(seurat_monocytes)) |> filter(str_detect(gene ,pattern = "HLA-D")) |> pull(gene)
+
+seurat_monocytes |> filter(group_per_sample != "control", cluster_clean=="hla_d_rhi_cd83_monocytes") |>
+  VlnPlot(features = "HLA-DRB5", group.by = "sampleID", pt.size = 0)+NoLegend()
+
+seurat_monocytes |> filter(group_per_sample != "control", cluster_clean=="hla_d_rhi_cd83_monocytes") |>  VlnPlot(features = "HLA-DRB1", group.by = "sampleID", pt.size = 0)+NoLegend()
+
+seurat_monocytes |> filter(group_per_sample != "control", cluster_clean=="hla_d_rhi_cd83_monocytes") |> VlnPlot(features = "S100A9", group.by = "sampleID", pt.size = 0)+NoLegend()
+
+seurat_monocytes |> filter(group_per_sample != "control", cluster_clean=="hla_d_rhi_cd83_monocytes") |> VlnPlot(features = "CIITA", group.by = "sampleID", pt.size = 0)+NoLegend()
+```
+
+
+

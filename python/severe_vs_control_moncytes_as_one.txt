@@ -1,0 +1,30 @@
+import importlib
+import warnings
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+import pickle as pkl
+import matplotlib.pyplot as plt
+
+from sccoda.util import comp_ana as mod
+from sccoda.util import cell_composition_data as dat
+from sccoda.util import data_visualization as viz
+from sccoda.util import comp_ana as mod
+import sccoda.datasets as scd
+
+cell_counts =pd.read_csv(filepath_or_buffer= "..\\output\\meta_data_condition_per_sample_donor_day_monocytes_as_one.csv")
+data_grouping=pd.read_csv(filepath_or_buffer= "..\\output\\meta_data_condition_per_sample_donor_day_grouping.csv")
+
+data_all = dat.from_pandas(cell_counts, covariate_columns=["sample"])
+data_all.obs=data_grouping 
+
+####################
+data=data_all[((data_all.obs.condition=="control") | (data_all.obs.condition=="severe"))]
+	
+cell_types = data.var.index
+for ct in cell_types:
+                print(f"Reference: {ct}")
+                model_temp = mod.CompositionalAnalysis(data, formula="condition", reference_cell_type=ct)
+                temp_results = model_temp.sample_hmc(num_results=20000)
+                # Select credible effects#
+                temp_results.effect_df.to_csv("monocytes_as_one"+ct+"_severe_vs_control.csv")

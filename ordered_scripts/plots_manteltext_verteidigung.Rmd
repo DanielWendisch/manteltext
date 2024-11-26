@@ -1,0 +1,2007 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+```{r message=FALSE, warning=FALSE}
+library(patchwork)
+library(cowplot)
+library(tidyverse)
+library(Seurat)
+library(magrittr)
+library(ggpubr)
+library(gridGraphics)
+library(ggdendro)
+library(readxl)
+library(janitor)
+library(ggsci)
+library(ggthemes)
+library(ggridges)
+library(tidyseurat)
+library(ggpubr)
+library(rstatix)
+library(tidyseurat)
+library(extrafont)
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+source("../scripts/functions_bal_macrophages.R")
+source("../scripts/initialize_bal_data.R")
+source("../scripts/loo_module_score_dotplots.R")
+source("../scripts/fibrosis_datasets_effect_size_calc.R")
+library(ggrepel)
+library(rcartocolor)
+size_ <- 6
+```
+
+
+```{r}
+setwd("C:/Users/Danne/R_projects/manteltext/scripts")
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- "..\\output\\"
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+Idents(seurat_monocytes) <- "cluster_clean"
+seurat_monocytes <- seurat_monocytes %>% subset(idents= "cd163hi_monocytes_1_d7", invert=T )
+seurat_monocytes <- seurat_monocytes |> filter(!(UMAP_2>0&UMAP_1<10))
+
+```
+```{r}
+samples <- seurat_monocytes |> select(group_per_sample,donor,days_after_onset) |> distinct(donor)
+
+
+seurat_monocytes |> select(group_per_sample,donor,days_after_onset) |> distinct(donor)
+
+samples[seurat_monocytes |> select(group_per_sample,donor,days_after_onset) |> distinct() |> select(group_per_sample,donor) |> duplicated(),] |> arrange(donor)
+
+
+
+
+seurat_monocytes |> select(group_per_sample,donor) |> distinct() |> pull(group_per_sample) |> table()
+
+seurat_monocytes |> select(days_after_onset) |> distinct() 
+
+```
+```{r}
+seurat_monocytes |>
+  select(group_per_sample,donor,days_after_onset, sex) |> 
+  distinct() |> 
+  mutate(group_per_sample=factor(group_per_sample, levels=c("control", "mild","severe"))) |> 
+  mutate(donor=fct_reorder(donor,as.numeric(group_per_sample))) |> 
+  ggplot(aes(color=group_per_sample,y=donor,x=days_after_onset, shape = sex)) +
+  geom_point() +
+  theme_defense_dark
+  
+
+seurat_monocytes |>
+select(group_per_sample,donor,days_after_onset, sex) |>  distinct() |> group_by(group_per_sample) |>count(sex)
+```
+
+```{r}
+unique(seurat_monocytes$cluster_clean)
+
+number_of_cols <- 8
+my_scale <- colorblind_pal()(number_of_cols)
+names(my_scale) <- as.character(1:number_of_cols)
+tibble(pal=as.character(1:number_of_cols), height=rep(1,number_of_cols)) %>% ggplot(aes(pal,height, fill=pal))+geom_col()+scale_fill_manual(values=my_scale)
+
+names(my_scale)=NULL
+cols_cluster_clean <- c("classical_monocytes"=my_scale[6],
+"non_classical_monocytes"=my_scale[4],
+"hla_d_rhi_cd83_monocytes"=my_scale[7],
+"hla_d_rlo_s100a_monocytes"=my_scale[5])
+
+cols_severity <- c("mild"=my_scale[2],
+                "severe"="#dc322f",
+                "control"="grey")
+
+```
+```{r}
+library(ggdark)
+theme_defense <-   theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")
+
+
+
+theme_defense_dark <- theme_defense + dark_theme_bw()
+```
+
+```{r}
+
+
+x_marg <- . %>% filter(UMAP_1>3,UMAP_2<1)
+
+dimplot_mono_cluster <- seurat_monocytes %>% DimPlot(group.by = "cluster_clean")
+dimplot_mono_cluster <- as_tibble(dimplot_mono_cluster$data) %>% x_marg 
+dimplot_mono_severity <- seurat_monocytes %>% DimPlot(group.by = "group_per_sample")
+dimplot_mono_severity <- as_tibble(dimplot_mono_severity$data) %>%  x_marg
+
+
+p_dimplot_mono_cluster <- dimplot_mono_cluster %>%
+ # slice_sample(n=100) %>% 
+  ggplot(aes(UMAP_1,UMAP_2, color=cluster_clean))+
+  geom_point(size=0.8, alpha=0.4)+theme_minimal()+scale_color_manual(values=cols_cluster_clean)+xlim(c(2,15))
+
+
+
+p_dimplot_mono_severity <- dimplot_mono_severity %>% 
+  arrange(desc(group_per_sample)) %>%  ggplot(aes(UMAP_1,UMAP_2, color=group_per_sample)) + 
+  geom_point(alpha=0.1)+
+  geom_density_2d(bins=15, linejoin = "bevel", size=1 )+ theme_minimal()+scale_color_manual(values=cols_severity)+xlim(c(2,15))
+
+
+
+monocyte_umaps <- p_dimplot_mono_cluster+ p_dimplot_mono_severity+  plot_layout(guides = 'collect') &theme_void()&theme(legend.position = "none")
+monocyte_umaps
+ggsave(monocyte_umaps, filename = paste0("..\\output\\plots\\","monocyte_umaps.svg"), dpi = 100, height=5
+       )
+
+ggsave(p_dimplot_mono_cluster, filename = paste0("..\\output\\plots\\","p_dimplot_mono_cluster.svg") )
+```
+```{r verteidiung 1}
+
+p_dimplot_mono_cluster_verteidigung <- dimplot_mono_cluster %>%
+ # slice_sample(n=100) %>% 
+  ggplot(aes(UMAP_1,UMAP_2, color=cluster_clean))+
+  geom_point(size=1.1, alpha=0.5, shape=16)+
+  theme_defense_dark+
+  scale_color_manual(values=cols_cluster_clean)+
+  xlim(c(2,15))
+
+p_dimplot_mono_severity_verteidigung <- dimplot_mono_severity %>% 
+  arrange(desc(group_per_sample)) %>%
+  ggplot(aes(UMAP_1,UMAP_2, color=group_per_sample)) + 
+  geom_point(alpha=0.1, shape=16)+
+  geom_density_2d(bins=15,
+                  #linejoin = "bevel",
+                  size=1 )+
+  theme_defense_dark+
+  scale_color_manual(values=cols_severity)+xlim(c(2,15))
+
+p_dimplot_mono_white <- dimplot_mono_severity %>% 
+  arrange(desc(group_per_sample)) %>%
+  ggplot(aes(UMAP_1,UMAP_2)) + 
+  geom_point(alpha=0.5, shape=16, color="white")+
+  theme_defense_dark+
+  scale_color_manual(values=cols_severity)+xlim(c(2,15))
+
+p_dimplot_mono_cluster_verteidigung
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_cluster.png") , bg='transparent', dpi=800)
+p_dimplot_mono_severity_verteidigung
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_severity_density.png") , bg='transparent', dpi=800)
+
+
+```
+## Monocyte umap dark
+```{r}
+p_dimplot_mono_white <-   seurat_monocytes |>
+  ggplot(aes(UMAP_1,UMAP_2)) +
+  geom_point(alpha=0.5, shape=16, color= "white")+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")
+p_dimplot_mono_white
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_severity_white.png") , bg='transparent', dpi=800)
+
+```
+```{r}
+cols_cluster_w_red <- c("classical_monocytes"=my_scale[6],
+"non_classical_monocytes"=my_scale[4],
+"hla_d_rhi_cd83_monocytes"=my_scale[7],
+"hla_d_rlo_s100a_monocytes"="red")
+
+p_dimplot_mono_clusteres_w_red <-   seurat_monocytes |>
+  ggplot(aes(UMAP_1,UMAP_2, color=cluster_clean)) +
+  geom_point(alpha=0.5, shape=16)+
+scale_color_manual(values=cols_cluster_w_red)+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")
+p_dimplot_mono_clusteres_w_red
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_p_dimplot_mono_clusteres_w_red.png") , bg='transparent', dpi=800)
+```
+
+
+```{r}
+seurat_monocytes <- seurat_monocytes |> filter(!(UMAP_2>0&UMAP_1<10))
+
+feature_select <- "CD14"
+
+mono_feature_plot_defense <- function(feature_select,title=NA, subtitle=""){
+    if (is.na(title)) {title <- feature_select
+  }
+  plot_ <- seurat_monocytes |>
+  join_features(features = feature_select) |> 
+  ggplot(aes(UMAP_1,UMAP_2,color=.abundance_RNA)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+
+mono_feature_plot_defense_meta_data <- function(feature_select, title=NA, subtitle=""){
+S
+  return(plot_)
+}
+
+
+gene <- "CD14"
+mono_feature_plot_defense(gene)
+
+gene <- "FCGR3A"
+mono_feature_plot_defense(gene)
+
+gene <- "HLA-DRA"
+mono_feature_plot_defense(gene)
+
+gene <- "CD83"
+mono_feature_plot_defense(gene)
+
+markers_verteidigung <-  c(
+  "CD14","FCGR3A", 
+  "IFI27","IFI44L",
+  "IRF1","IL1B", "CD83",
+  "S100A8", "S100A9", "S100A12",
+  "HLA-DRA", "HLA-DRB1"
+  )
+
+plot_list <- list()
+for (gene in markers_verteidigung) {
+  plot_list[[gene]] <- mono_feature_plot_defense(gene)
+  
+}
+
+
+
+s1008.9.12 <- c("S100A8","S100A9","S100A12")
+HLA2_genes <- c("HLA-DRB1",
+"HLA-DRA",
+"CD74",
+"HLA-DPB1",
+"HLA-DMA",
+"HLA-DMB",
+"HLA-DQB1",
+"HLA-DRB5",
+"HLA-DQA1",
+'B2M')
+
+seurat_monocytes$Calgranulin <-  seurat_monocytes@assays$RNA@data[s1008.9.12,] |> t() |> rowSums()
+seurat_monocytes$HLA2_genes <-  seurat_monocytes@assays$RNA@data[HLA2_genes,] |> t() |> rowSums()
+
+
+```
+```{r}
+mono_feature_plot_defense("white")
+```
+
+```{r}
+marker <- "CD14"
+mono_feature_plot_defense(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+
+
+
+```{r}
+marker <- "FCGR3A"
+mono_feature_plot_defense(marker, title = "CD16 (FCGR3A)")
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+
+
+```{r}
+marker <- "IFI27"
+mono_feature_plot_defense(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "IFI44L"
+mono_feature_plot_defense(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "IRF1"
+mono_feature_plot_defense(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "IL1B"
+mono_feature_plot_defense(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "CD83"
+mono_feature_plot_defense(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", marker,".png") , bg='transparent', dpi=800)
+```
+
+```{r}
+mono_feature_plot_defense_meta_data("Calgranulin", title = "Calgranulin (S100A8/A9/A12)", subtitle = "normalized gene expression")
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", "Calgranulin",".png") , bg='transparent', dpi=800)
+
+```
+
+```{r}
+mono_feature_plot_defense_meta_data("HLA2_genes", title = "HLA type 2 ", subtitle = "normalized gene expression (sum)")
+ggsave(paste0(path_output_file,"/plots_verteidigung/", "mono_berlin_umap_harmony_", "HLA2_genes",".png") , bg='transparent', dpi=800)
+
+```
+
+
+
+# CD163 appears to be high in classical because of
+```{r}
+seurat_monocytes$donor_cluster <- paste((seurat_monocytes$donor), seurat_monocytes$cluster_clean, sep = ".")
+```
+
+```{r}
+
+x <- seurat_monocytes  |> 
+  join_features("CD163")|>
+  filter(cluster_clean !="non_classical_monocytes") |> 
+  #slice_sample(n=1000) |> 
+  group_by(donor, cluster_clean, disease_stage) |> 
+  summarise(CD163=mean(.abundance_RNA)) |> 
+  ungroup() 
+
+stat.test <- x %>%
+  mutate(disease=if_else(disease_stage %in% c("late", "early"), "COVID-19",disease_stage)) |> 
+  #group_by(dose) %>%
+  t_test(formula=CD163~disease) %>%
+  adjust_pvalue() %>%
+  add_significance("p.adj")
+  
+x %>%
+  mutate(disease=if_else(
+    disease_stage %in% c("late", "early"), "COVID-19",disease_stage)) |> 
+  ggplot(aes(disease, CD163))+
+  geom_boxplot()+
+  geom_jitter(aes(color=disease_stage))
+  
+  
+
+```
+
+```{r}
+x1 <- seurat_monocytes |> 
+  join_features("CD163")|>
+  filter(cluster_clean !="non_classical_monocytes") |>
+  mutate(donor_severity=paste(donor,group_per_sample)) |> 
+  mutate(donor_severity=fct_reorder(donor_severity, as.numeric(as.factor(donor_severity)))) 
+
+x1 |> 
+  ggplot(aes(.abundance_RNA,donor_severity, fill=group_per_sample))+
+  geom_density_ridges(scale=5)
+
+
+CD163_ridge <- x1 |> group_by(donor_severity) |> slice_sample(n=200) |> ungroup() |> 
+  ggplot(aes(.abundance_RNA,group_per_sample, fill=group_per_sample))+
+  geom_density_ridges(scale=5)+scale_fill_manual(values=cols_severity)+
+  theme_bw()+
+  ggtitle("CD163 in CD14+ monocytes")
+
+ggsave(CD163_ridge, filename = paste0("..\\output\\plots\\","CD163_ridge.svg"), height=3, width=5) 
+
+```
+
+What are the methods of decoagulation of the different groups, including Bonn.
+
+We also included publicly available single-cell transcriptome data derived from 22 control samples into the analysis; 3 samples were derived from 10x Genomics, San Francisco, CA 94111, USA 
+(5k_pbmc_v3: https://support.10xgenomics.com/single-cell-gene-expression/datasets/3.0.2/5k_pbmc_v3,
+pbmc_10k_v3: https://support.10xgenomics.com/single-cell-gene-expression/datasets/3.0.0/pbmc_10k_v3,
+pbmc_1k_v3: https://support.10xgenomics.com/single-cell-gene-expression/datasets/3.0.0/pbmc_1k_v3),
+
+19 samples derived from Reyes et al. (2020) 
+"Blood samples from these subjects and healthy controls were drawn with EDTA Vacutainer tubes (BD Biosciences) and processed within 3h of collection"
+
+
+```{r}
+meta_data <- x1 |> select(donor:PoolID,platform:COVID.19.related_medication_and_anti.microbials,cluster_labels_res.0.4:hemato.labels, cluster_clean) |> unique() 
+
+meta_data|> filter(str_detect(sampleID, "k") )
+
+meta_data|> filter(purification=="Frozen")
+
+meta_data|> filter(disease_stage=="control")
+```
+
+```{r}
+seurat_monocytes  |> 
+  join_features("CD163")|>
+  filter(cluster_clean !="non_classical_monocytes") |> 
+  #slice_sample(n=1000) |> 
+  group_by(donor, cluster_clean, disease_stage) |> 
+  summarise(CD163=mean(.abundance_RNA)) |> 
+  ungroup()
+```
+
+
+```{r}
+seurat_monocytes_clean <- seurat_monocytes
+markers_final <- genes_manual_select_1 <- c(
+   "FYB",
+   "FCER1G","CX3CR1",
+  "ITGAL",  "C1QA",  
+  "CD83","IFI27","IFI44L", "IRF1","IL1B", 
+  "S100A8", "S100A9", "S100A12",
+  "SELL",
+  "HLA-DRA", "HLA-DRB1",
+  "CD163","FCGR3A", "CD14") |> rev()
+
+
+markers_final_names <-  c(markers_final,"CD226", "CD69")
+
+markers_final<- FindAllMarkers(seurat_monocytes_clean,
+                                         features = markers_final,
+                                         logfc.threshold = 0,
+                                         min.pct = 0,
+                                         return.thresh = 1)
+
+
+schulteschrepping_dotplot <- markers_final%>% 
+  mutate(avg_log2FC=case_when(
+    avg_log2FC>=2~2,
+    avg_log2FC<=(-2)~(-2),
+    TRUE~avg_log2FC
+    
+  ))|> 
+  filter(gene %in% markers_final_names) %>% 
+  mutate(gene=factor(gene, levels =markers_final_names ),
+         cluster=factor(cluster, levels=c("hla_d_rlo_s100a_monocytes","hla_d_rhi_cd83_monocytes","classical_monocytes","non_classical_monocytes" ))) %>% 
+  # arrange(gene) %>% 
+  ggplot(aes(cluster, gene,size=pct.1, color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
+          scale_color_carto_c(name = "average log2/n fold change: ",
+                           type = "diverging", palette = "Geyser", direction = 1)
+schulteschrepping_dotplot 
+ggsave(schulteschrepping_dotplot, filename = paste0("..\\output\\plots\\","schulteschrepping_dotplot.svg"), height=5) 
+schulteschrepping_dotplot +coord_flip()
+ggsave(schulteschrepping_dotplot +coord_flip()+theme(legend.position = "none"), filename = paste0("..\\output\\plots\\","schulteschrepping_dotplot_flipped.svg"), width=5, height=2.5)
+ggsave(schulteschrepping_dotplot +coord_flip(), filename = paste0("..\\output\\plots\\","schulteschrepping_dotplot_flipped_big.svg"), width=10, height=5)
+
+
+```
+## Monocyte Dotplot dark
+```{r}
+markers_verteidigung <-  c(
+  "CD14","FCGR3A", 
+  "IFI27","IFI44L",
+  "IRF1","IL1B", "CD83",
+  "S100A8", "S100A9", "S100A12",
+  "HLA-DRA", "HLA-DRB1"
+  )
+
+schulteschrepping_dotplot_verteidigung <- markers_final%>% 
+  mutate(avg_log2FC=case_when(
+    avg_log2FC>=2~2,
+    avg_log2FC<=(-2)~(-2),
+    TRUE~avg_log2FC))|> 
+  filter(gene %in% markers_verteidigung) %>% 
+  mutate(gene=factor(gene,
+                     levels =markers_verteidigung ),
+         cluster=factor(cluster, levels=c("hla_d_rlo_s100a_monocytes",
+                                          "hla_d_rhi_cd83_monocytes",
+                                          "classical_monocytes",
+                                          "non_classical_monocytes" ))) %>% 
+ ggplot(aes(cluster, gene,size=pct.1,
+             color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+          scale_color_carto_c(name = "mean log2FC: ",
+                           type = "diverging",
+                           palette = "Geyser",
+                           direction = 1)+
+            scale_size(range = c(1, 15), name = "% expressed")
+
+schulteschrepping_dotplot_verteidigung+
+  theme_defense_dark+
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 60, hjust=1, face = "bold",size=12)
+        )+
+  scale_y_discrete(labels=str_replace_all(markers_verteidigung,
+                                          pattern = "FCGR3A", "FCGR3A (CD16)"))+
+  scale_x_discrete(labels=rep("",4))
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","schulteschrepping_dotplot_verteidigung.png") , bg='transparent', dpi=800)
+
+```
+
+
+```{r}
+
+library(ggdark)
+theme_defense <-   theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")
+
+
+
+theme_defense_dark <- theme_defense + dark_theme_bw()
+
+
+genes <- list(
+  "Control"    = c(
+    "LYZ", "LCP1"
+  ),
+  "SARS-CoV-2" = c(
+    "TGFBI", "GLUL", "MMP9", "CD84", "S100A6", "CAPG", "MRC1",
+    "CD163", "LGMN", "CD9", "MERTK", "SLAMF8", "CMKLR1", "NRP1", "ADAP2",
+    "SPRED1", "CALR"
+  ),
+  "3p-hpRNA"   = c(
+    "IFIT1", "IFITM3", "IFIT3", "ISG15", "TNFSF10", "IFI6", "IFI44L"
+  ),
+  "R848"       = c(
+    "CCL3", "IL1B", "CCL3L1", "CCL4", "IL6", "POU2F2", "CCL4L2"
+  )
+)
+
+gene_vec <- genes |> unlist()
+gene_vec <- c( "LCP1","CD163", "LGMN", "MERTK","TGFBI", "IFIT1", "ISG15","IL1B", "IL6", "CCL3")
+
+Idents(mono) <- "condition"
+markers_final<- FindAllMarkers(mono,
+                                         features = ensemblizer_2(gene_vec),
+                                         logfc.threshold = 0,
+                                         min.pct = 0,
+                                         return.thresh = 1, ) |> mutate(gene=genifiy_2(gene))
+
+
+mono_wendisch_dotplot_verteidigung <- markers_final%>% 
+  mutate(avg_log2FC=case_when(
+    avg_log2FC>=2~2,
+    avg_log2FC<=(-2)~(-2),
+    TRUE~avg_log2FC))|> 
+  filter(gene %in% gene_vec) %>% 
+  mutate(gene=factor(gene,
+                      levels =gene_vec )#,
+         # cluster=factor(cluster, levels=c("hla_d_rlo_s100a_monocytes",
+         #                                  "hla_d_rhi_cd83_monocytes",
+         #                                  "classical_monocytes",
+         #                                  "non_classical_monocytes" ))
+         ) %>%
+ ggplot(aes(cluster, gene,size=pct.1,
+             color=avg_log2FC))+
+  geom_point()+
+  scale_color_gradient2(midpoint=0, low="blue", mid="grey",high="red", space ="Lab" ) +
+          scale_color_carto_c(name = "mean log2FC: ",
+                           type = "diverging",
+                           palette = "Geyser",
+                           direction = 1)+
+            scale_size(range = c(1, 15), name = "% expressed")
+
+mono_wendisch_dotplot_verteidigung+
+  dark_theme_bw()+
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 60, hjust=1, face = "bold",size=12)
+        )+
+  scale_y_discrete(labels=str_replace_all(gene_vec,
+                                          pattern = "FCGR3A", "FCGR3A (CD16)"))+
+  scale_x_discrete(labels=rep("",4))
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","wendisch_mono_dotplot.png") , bg='transparent', dpi=800, height = 4)
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+#function that reads scsconda output files and binds them into one tibble
+make_df <- function(rel_path_folder="..\\python\\", pattern="mild_vs_control.csv"){
+  files_names<- list.files(rel_path_folder) %>% str_subset(pattern) %>% paste0(rel_path_folder,.)
+  files_names%>%
+  #create alist of tibbles of the scConda results
+  map(read_csv) %>%
+  #add a column to each tibble with the comparison of the table
+  map2(files_names,~mutate(.x, comparison=.y)) %>% 
+  #merge all into one dataframe
+  map_df(~bind_rows(.x))
+  }
+
+theme_2 <- theme(legend.position = "none",
+                                                                                                                                       panel.grid.major.x=element_line(size=1, color = "black"),
+                                                                                                                                       panel.grid.minor.x=element_line(size=0.6, color = "black"))
+
+theme_2_main <- theme(legend.position = "none",
+                                                                                                                                       panel.grid.major.x=element_line(size=1, color = "black"),
+                                                                                                                                       panel.grid.minor.x=element_line(size=0.6, color = "black"),
+                axis.text.y=element_blank(),
+                axis.title.y = element_blank(),
+                axis.ticks.y = element_blank()
+                )
+
+monocyte_names <- rev(c("Classical_Monocytes", "non_Classical_Monocytes", "HLA_DRhi_CD83_Monocytes", "HLA_DRlo_s100a_Monocytes"))
+shorten_df <- . %>%   clean_names %>% 
+  filter(cell_type %in% monocyte_names) %>% 
+  mutate(cell_type=factor(cell_type, levels =monocyte_names ))
+
+d <- make_df(pattern="mild_vs_control.csv") 
+cut_comparison_name <- .%>%
+  separate(comparison, sep = "\\\\", into=LETTERS[1:3])%>% select(-A,-B) %>% 
+  separate(C, sep = "_severe", into="comparison")%>%
+  glimpse()
+
+
+p_sccoda_1 <- make_df(pattern="mild_vs_control.csv") %>% 
+  shorten_df %>% 
+
+  ggplot(aes(y=cell_type))+
+  geom_segment(aes(yend=cell_type,  x=hdi_3_percent, xend=hdi_97_percent, color=comparison),alpha=0.3, size=4)+
+  theme_bw()+ theme_2+
+  ggtitle("mild_vs_control.csv")+ xlim(c(-4,3.5))
+
+p_sccoda_2 <- make_df(pattern="severe_vs_control.csv") %>% 
+  shorten_df() %>% 
+  ggplot(aes(y=cell_type))+
+  geom_segment(aes(yend=cell_type,  x=hdi_3_percent, xend=hdi_97_percent, color=comparison),alpha=0.3, size=4)+
+  theme_bw()+ theme_2_main+ggtitle("severe_vs_control")+ xlim(c(-4,3.5))
+
+p_sccoda_3 <- make_df(pattern="severe_vs_mild.csv") %>% 
+  shorten_df() %>% 
+    cut_comparison_name() %>% 
+  ggplot(aes(y=cell_type))+
+  geom_segment(aes(yend=cell_type,  x=hdi_3_percent, xend=hdi_97_percent, color=comparison),alpha=0.3, size=4)+
+  theme_bw()+
+  theme_2_main+
+  theme(legend.position = "right")+ 
+  ggtitle("severe_vs_mild") + xlim(c(-4,3.5))
+
+
+p_sccoda_1+p_sccoda_2+p_sccoda_3+plot_layout(heights=c(0.3), widths = c(1,1,1),)
+
+p_sccoda <- p_sccoda_1/p_sccoda_2/p_sccoda_3 &theme(axis.text.y=element_text())
+p_sccoda
+ggsave(p_sccoda, filename = paste0("..\\output\\plots\\","p_sccoda.pdf"), height=4.5, width=7)
+```
+
+
+```{r}
+#load deseq results from schulte_schrepung_cluster_donor...rmd
+results_hla_d_rlo_s100a_monocytes<- read_rds(paste0(path_output_file,"deseq_results_hla_d_rlo_s100a_monocytes.rds"))
+res_highlight <- results_hla_d_rlo_s100a_monocytes%>% 
+   mutate(highlight=ifelse(gene %in% c("S100A9","S100A12", "CD83", "HLA-DRA","IFI44L","CCL2", "CCL3", "IL1B", "CD1C", "THBD", "ERAP2", "CIITA"), "sig", "not")) %>% 
+    # mutate(highlight=ifelse(gene %in% c("MAFB"), "sig", "not")) %>% 
+  arrange(desc(highlight))
+
+p_de_seq2 <- res_highlight %>% 
+  ggplot(aes(log2FoldChange, -log10(pvalue))) + 
+  geom_point(aes(color=highlight), alpha=0.5)+ 
+  scale_color_manual(values = c("sig"="red", "not"= "black"),
+                     aesthetics = c("colour", "fill"))+
+geom_label_repel(data = filter(res_highlight, highlight!= "not"),aes(log2FoldChange, -log10(pvalue),label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.1, size=2)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw()
+
+
+
+
+
+
+p_de_seq2_png <- res_highlight %>% 
+  ggplot(aes(log2FoldChange, -log10(pvalue))) + 
+  geom_point(aes(color=highlight), alpha=0.5)+ 
+  scale_color_manual(values = c("sig"="red", "not"= "black"),
+                     aesthetics = c("colour", "fill"))+
+#geom_label_repel(data = filter(res_highlight, highlight!= "not"),aes(log2FoldChange, -log(pvalue),label=gene),arrow = arrow(length = unit(0.01, "npc")),box.padding = 0.1, size=2)+
+  # geom_vline(xintercept = c(-1.5,1.5), linetype="dashed") +
+  # geom_hline(yintercept = 5, linetype="dashed")+
+  theme_bw()+theme(axis.text.y=element_blank(),
+                axis.title.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.x=element_blank(),
+                axis.title.x = element_blank(),
+                axis.ticks.x = element_blank(),
+                legend.position = "none")
+
+
+p_de_seq2_png
+p_de_seq2
+ggsave(p_de_seq2, filename = paste0("..\\output\\plots\\","p_de_seq2.svg"), height=4.5, width=7)
+ggsave(p_de_seq2_png, filename = paste0("..\\output\\plots\\","p_de_seq2.png"), height=3.5, width=3.5, dpi=1000)
+
+```
+```{r}
+p_sccoda_comb <- p_sccoda_1+p_sccoda_2+p_sccoda_3+plot_layout(heights=c(0.3), widths = c(1,1,1))
+
+fig_1 <- p_dimplot_mono_cluster+ p_dimplot_mono_severity + schulteschrepping_dotplot+ p_sccoda_comb+CD163_vln_plot+p_de_seq2+plot_layout(heights=c(1,1,1,1), widths = c(1,1)) &theme(text= element_text(size = 8), legend.position = "none") #change legend text font size) 
+fig_1
+ggsave(plot = fig_1,"../output/fig_1.pdf", units = "cm", height = 24.7*0.666, width = 16.5)
+ggsave(plot = fig_1,"../output/fig_1.svg", units = "cm", height = 24.7*0.666, width = 16.5)
+
+```
+```{r}
+AM1_vs_AM2_markers <- BAL_macrophages %>% FindMarkers(ident.1 = "AM1", ident.2 = "AM2") %>% as_tibble(rownames = "ensg") %>% mutate(genes=genifiy_2(ensg))
+AM1_vs_AM2_markers %>% arrange(-avg_log2FC)
+```
+
+
+```{r warning=FALSE}
+BAL_macrophages@reductions$umap_3d <- NULL
+umap_plot <- DimPlot(BAL_macrophages, reduction = "umap")
+
+umap_plot <- umap_plot$data %>% ggplot(aes(UMAP_1, UMAP_2, color = ident)) + geom_point(aes(alpha =
+                                                                                              0.2)) +
+  theme(legend.position = "none")  + theme_2 +  ggplot2::scale_color_manual(values = color.cluster)
+umap_plot
+#markers_cluster_tbl <-  read_rds("../intermediate_data/markers_cluster_tbl.rds")
+manuallly_sel_2groups <- c("ITGAM",
+                           "CD14",
+                           "CCR1",
+                           "CSF1R",
+                           "FABP4",
+                           "INHBA",
+                           "FFAR4",
+                           "PPARG",
+                           "PCOLCE2")
+
+#markers_cluster_tbl <- FindAllMarkers(BAL_macrophages) |> as_tibble() |> mutate(gene =genifiy_2(gene))
+
+if (!file.exists("../intermediate_data/markers_cluster_tbl.rds")) {
+  markers_cluster_tbl <- FindAllMarkers(BAL_macrophages,
+                                      test.use = "roc",
+                                      max.cells.per.ident = 200) |> as_tibble() |> mutate(gene = genifiy_2(gene))
+  write_rds(
+    markers_cluster_tbl,"../intermediate_data/markers_cluster_tbl.rds"
+
+  )
+  
+}else markers_cluster_tbl <-  read_rds("../intermediate_data/markers_cluster_tbl.rds")
+
+
+top_markers_cluster <- markers_cluster_tbl %>% mutate(clus = factor(cluster, levels = cluster_names)) %>%
+  group_by(clus) %>% slice_max(myAUC, n = 5) %>% arrange(.by_group =) %>%  pull(gene) %>% unique()
+
+
+dot_plot <- dot_plot_cluster(unique(c(
+  manuallly_sel_2groups#, top_markers_cluster
+))) + theme(
+  legend.position = "none",
+  axis.text.x = element_text(size_),
+  axis.text.y = element_text(size_)
+)
+
+a1 <- umap_plot + dot_plot + plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(size = 8)) + theme_minimal()
+
+a1
+
+ggsave2(plot = umap_plot + theme_minimal(), filename = "../output/BAL_umap.tiff")
+
+ggsave(
+  plot = umap_plot + theme_minimal(),
+  "../output/plots/bal_umap.tiff",
+  height = 5
+)
+
+```
+
+```{r}
+ umap_plot$data %>% mutate(na=rep(c(NA,NA,NA,1),nrow(umap_plot$data)/4)) %>% mutate(umap_red=UMAP_1*na,umap_red=UMAP_2*na)
+
+ umap_plot$data %>% mutate(na=rep(c(NA,NA,NA,1),nrow(umap_plot$data)/4)) %>% mutate(umap_red_1=UMAP_1*na,umap_red_2=UMAP_2*na) %>% 
+   ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "mitre")+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)+ geom_point(aes(x= umap_red_1, y=umap_red_2, alpha=0.2))
+
+ #ggsave("umap_dens.png")
+
+ umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "bevel")+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)
+ 
+  umap_dens <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "round")+
+  theme(legend.position = "none")  +theme_2 +  
+    ggplot2::scale_color_manual(values = color.cluster)+xlim(-10,8)+ylim(-5,5)
+  umap_dens
+  
+  
+
+  
+ # ggsave(dpi=800, "umap_dens.tiff")
+```
+
+
+```{r warning=FALSE}
+x_lim_pc_and_loadings <- c(-0.5,0.33)#
+y_lim_pc_and_loadings <- c(-0.4,0.15)
+text_size <- function(size_=6){
+  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
+  
+}
+
+
+#text_size <- . &  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
+
+
+
+
+###pca-plot with loadings
+pc1_pc2 <- DimPlot(BAL_macrophages, reduction = "pca", pt.size = 1.1, dims = c(1:2), )
+
+pc1_pc2 <- pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_point(aes(alpha=0.2))+# xlim(x_lim_pc_and_loadings) + ylim(y_lim_pc_and_loadings) + 
+  theme(legend.position = "none")  +theme_2 + xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)
+
+
+pc1_pc2_titeled <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+ geom_point(aes(alpha=0.2))+# xlim(x_lim_pc_and_loadings) + ylim(y_lim_pc_and_loadings) + 
+  theme(legend.position = "none")  +theme_2_titeled + xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)+ggtitle("PC1 vs. PC2")
+
+
+
+pc1_pc2_dens <-  pc1_pc2$data %>% ggplot(aes(PC_1,PC_2,color=ident))+  geom_density_2d(bins=200, linejoin = "bevel")+
+  theme(legend.position = "none")  +theme_2 +  ggplot2::scale_color_manual(values = color.cluster)+ggtitle("PC1 vs. PC2")
+
+
+umap_dens <- umap_plot$data %>% ggplot(aes(UMAP_1,UMAP_2,color=ident))+ geom_density_2d(bins=200, linejoin = "round")+
+  theme(legend.position = "none")  +theme_2 +  
+  ggplot2::scale_color_manual(values = color.cluster)+xlim(-10,8)+ylim(-5,5)
+umap_dens
+
+# pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
+#   APOC1_pc1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+#   HLA_d_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+#   S100A8_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))
+
+
+
+#     ggplot2::scale_color_manual(values = color.cluster)+ xlim(x_lim_pc_and_loadings)+ ylim(y_lim_pc_and_loadings)
+#   umap_dens
+#   
+# nual(values = color.cluster)+ggtitle("PC3 vs. PC4")
+# pc3_pc4_titeled_dens
+
+pc1_pc2 <- pc1_pc2+theme_minimal() 
+
+ggsave(plot = pc1_pc2,"../output/plots/bal_pc_1_2.tiff", height = 5)
+pc1_pc2
+
+```
+## BAL dark
+```{r}
+
+
+p_dimplot_BAL_macrophages_white <-   BAL_macrophages |>
+  ggplot(aes(-UMAP_1,-UMAP_2)) +
+  geom_point(alpha=0.5, shape=16, color= "white")+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")
+p_dimplot_BAL_macrophages_white
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_white.png") , bg='transparent', dpi=800)
+```
+```{r}
+p_dimplot_BAL_macrophages_clusters <-   BAL_macrophages |>
+  ggplot(aes(-UMAP_1,-UMAP_2,color= Cluster)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_manual(values = color.cluster)+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")
+p_dimplot_BAL_macrophages_clusters
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_clusters.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+BAL_macrophages$PC_1_Harmony <- BAL_macrophages@reductions$pca@cell.embeddings[,"PC_1"]
+BAL_macrophages$PC_2_Harmony <- BAL_macrophages@reductions$pca@cell.embeddings[,"PC_2"]
+
+p_dimplot_BAL_macrophages_pc_harmony_white <-   BAL_macrophages |>
+  ggplot(aes(PC_1_Harmony,PC_2_Harmony)) +
+  geom_point(alpha=0.5, shape=16, color= "white")+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")
+p_dimplot_BAL_macrophages_pc_harmony_white
+
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_harmony_white.png") , bg='transparent', dpi=800)
+```
+```{r}
+p_dimplot_BAL_macrophages_pc_harmony_cluster <-   BAL_macrophages |>
+  ggplot(aes(PC_1_Harmony,PC_2_Harmony, color= Cluster)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_manual(values = color.cluster)+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("PC 1 (FastMNN)")+
+  ylab("PC 2 (FastMNN)")
+p_dimplot_BAL_macrophages_pc_harmony_cluster
+
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_harmony_cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+p_dimplot_BAL_macrophages_pc_harmony_cluster <-   BAL_macrophages |>
+  ggplot(aes(PC_1_Harmony,PC_2_Harmony, color= Cluster)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_manual(values = color.cluster)+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("PC 1 (FastMNN)")+
+  ylab("PC 2 (FastMNN)")
+p_dimplot_BAL_macrophages_pc_harmony_cluster
+
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_harmony_cluster.png") , bg='transparent', dpi=800)
+```
+
+
+```{r}
+
+p_dimplot_BAL_macrophages_umap_harmony_cluster <-   BAL_macrophages |>
+  ggplot(aes(-UMAP_1,-UMAP_2, color= Cluster)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_manual(values = color.cluster)+
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("UMAP (FastMNN)")+
+  ylab("UMAP (FastMNN)")
+  
+p_dimplot_BAL_macrophages_umap_harmony_cluster
+
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_umap_harmony_cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+BAL_feature_plot_PC_defense <- function(feature_select,title=NA, subtitle=""){
+    if (is.na(title)) {title <- feature_select
+  }
+  plot_ <- BAL_macrophages |>
+  join_features(features = ensemblizer_2(feature_select)) |> 
+  ggplot(aes(-UMAP_1,-UMAP_2,color=.abundance_RNA)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("UMAP_1 (FastMNN)")+
+  ylab("UMAP_1  (FastMNN)")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+
+marker <- "CD163"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "MERTK"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+
+marker <- "TGFBI"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+
+marker <- "C1QA"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+marker <- "APOE"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+
+```
+
+```{r}
+marker <- "FABP4"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+
+```
+
+```{r}
+
+marker <- "TGFBI"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+BAL_feature_plot_defense_meta_data_umap <- function(feature_select, title=NA, subtitle=""){
+  if (is.na(title)) {title <- feature_select
+  }
+  
+  plot_ <- BAL_macrophages |>
+  select(feature_select, UMAP_1, UMAP_2) |> 
+  ggplot(aes_string("-UMAP_1","-UMAP_2",color=feature_select)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("PC 1 (FastMNN)")+
+  ylab("PC 1  (FastMNN)")+
+  labs(color=feature_select)
+  return(plot_)
+}
+marker <- "Ayau_IPFeMp_score_fibrosis"
+BAL_feature_plot_defense_meta_data_umap(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "PDGFs"
+BAL_feature_plot_defense_meta_data_umap(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+protein_enrichment <- tribble(
+  ~h1, ~h3, ~h18, ~virus, ~geneset,
+  0.1, 0.3,  2.29e-4, "SARS2","Reyfman",
+  0.2,  0.2, 1.01e-7, "SARS2","Morse",
+   0.3, 0.2, 5.14e-3, "SARS2","Ayaub",
+  
+  0.1,  0.23, 0.3, "IAV","Reyfman",
+  0.2, 0.245, 0.3, "IAV","Morse",
+  0.1, 0.19, 0.3, "IAV","Ayaub"
+)
+
+protein_enrichment |> 
+  
+  pivot_longer(cols = h1:h18, names_to = "time_point", values_to = "p_value") |>
+  mutate(time_point=factor(time_point, levels=c("h1", "h3", "h18"))) |> 
+  ggplot(aes(time_point,geneset, fill=-log10(p_value)))+
+  geom_tile()+
+  scale_fill_viridis_c(values = c(0, 0.20, 0.3, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  # ggtitle(title,
+  #         subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=25, colour = "white"),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11, colour = "white"),
+        title = element_text(family = "Calibri", colour = "white"),
+        text = element_text(family = "Calibri", colour = "white"),
+        axis.title = element_text(size=12,family = "Calibri", colour = "white"),
+        axis.text = element_text(size=15,family = "Calibri", face = "bold", colour = "white"))+
+  # xlab("UMAP_1 (FastMNN)")+
+  # ylab("UMAP_1  (FastMNN)")+
+  labs(color=feature_select) +
+  facet_wrap(~virus, ncol = 1)+
+  theme(strip.text.x = element_text(
+        size = 12, color = "white", face = "bold"
+        ))
+
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","protein_geneset_heatmap", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+s1008.9.12 <- c("S100A8","S100A9","S100A12")
+HLA2_genes <- c("HLA-DRB1",
+"HLA-DRA",
+"CD74",
+"HLA-DPB1",
+"HLA-DMA",
+"HLA-DMB",
+"HLA-DQB1",
+"HLA-DRB5",
+"HLA-DQA1",
+'B2M')
+
+BAL_macrophages$Calgranulin <-  BAL_macrophages@assays$RNA@data[ensemblizer_2(s1008.9.12),] |> t() |> rowSums()
+BAL_macrophages$HLA2_genes <-  BAL_macrophages@assays$RNA@data[ensemblizer_2(HLA2_genes),] |> t() |> rowSums()
+
+
+marker <- "Calgranulin"
+BAL_feature_plot_defense_meta_data_umap(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+
+```{r}
+marker <- "HLA2_genes"
+BAL_feature_plot_defense_meta_data_umap(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+DotPlot(BAL_macrophages, ensemblizer(c("SDC2", "SPP1", "MERTK","TGFBI", "TGFB1")), group.by = "Cluster")+
+  ggdark::dark_theme_bw()+
+    scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )
+```
+
+```{r}
+marker <- "LGMN"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "SPP1"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "SDC3"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+
+```
+
+
+```{r}
+library(tidyseurat)
+BAL_feature_plot_defense_meta_data_pc <- function(feature_select, title=NA, subtitle=""){
+  if (is.na(title)) {title <- feature_select
+  }
+  
+  plot_ <- BAL_macrophages |>
+  select(feature_select, PC_1, PC_2) |> 
+  ggplot(aes_string("PC_1","PC_2",color=feature_select)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("PC 1 (FastMNN)")+
+  ylab("PC 1  (FastMNN)")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+BAL_feature_plot_PC_defense <- function(feature_select,title=NA, subtitle=""){
+    if (is.na(title)) {title <- feature_select
+  }
+  plot_ <- BAL_macrophages |>
+  join_features(features = ensemblizer_2(feature_select)) |> 
+  ggplot(aes(PC_1,PC_2,color=.abundance_RNA)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("PC 1 (FastMNN)")+
+  ylab("PC 1  (FastMNN)")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+
+BAL_feature_plot_defense_meta_data_pc()
+
+BAL_feature_plot_defense
+BAL_feature_plot_PC_defense("CD14")
+
+
+
+feature_select <- "CD14"
+```
+```{r}
+PDGFs <- c("PDGFA","PDGFB","PDGFC")
+
+BAL_macrophages$PDGFs <-  BAL_macrophages@assays$RNA@data[ensemblizer_2(PDGFs),] |> t() |> rowSums()
+
+marker <- "PDGFs"
+BAL_feature_plot_defense_meta_data_pc(marker)
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_UMAP_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+
+```{r}
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+
+BAL_feature_plot_PC_defense("PDGFA")
+BAL_feature_plot_PC_defense("PDGFB")
+BAL_feature_plot_PC_defense("PDGFC")
+BAL_feature_plot_PC_defense("PDGFD")
+```
+```{r}
+marker <- "SPP1"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "SDC3"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+marker <- "TGFB1"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+marker <- "TGFBI"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "SDC1"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+marker <- "SDC3"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+marker <- "MERTK"
+BAL_feature_plot_PC_defense(marker)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", marker, "cluster.png") , bg='transparent', dpi=800)
+```
+```{r}
+BAL_feature_plot_defense_meta_data_pc("Ayau_IPFeMp_score_fibrosis")
+ggsave(paste0(path_output_file,"/plots_verteidigung/","p_dimplot_BAL_macrophages_pc_", "Ayau_IPFeMp_score_fibrosis", "cluster.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+them__dark_module <- ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("BAL Custer")+
+  ylab("Ayaub et al IPF Mac module Score")
+
+BAL_macrophages |>
+  mutate(Cluster=factor(Cluster, levels=names(color.cluster))) |> 
+  ggplot(aes(Cluster,
+             Ayau_IPFeMp_score_fibrosis,
+             color=Cluster))+
+  geom_jitter(size=0.1, alpha=0.3)+
+  geom_boxplot(outliers = F)+
+  scale_color_manual(values = color.cluster)+
+  them__dark_module+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","BAL_Ayaub_module_score", "Ayau_IPFeMp_score_fibrosis", "cluster.png") , bg='transparent', dpi=800, width = 4, height = 6)
+```
+
+
+```{r}
+BAL_macrophages |>
+  ggplot(aes(Cluster,Ayau_IPFeMp_score_fibrosis, color=Cluster))+
+  geom_violin()+
+  geom_jitter(size=0.1)+
+  scale_color_manual(values = color.cluster)+
+  coord_fixed()+
+  them__dark_module
+```
+
+
+```{r warning=FALSE}
+#umap_plot_flipped
+
+umap_plot_flipped <- (umap_plot %+% (umap_plot$data %>% as_tibble() %>% mutate(UMAP_1=-UMAP_1,UMAP_2=-UMAP_2)))+theme_minimal()
+
+############# gene loadings
+APOC1_pc1 <- pca_loadings_plot(feature = "APOC1")+theme_minimal()+theme(legend.position = "none")+ xlim(x_lim_pc_and_loadings)+theme_1+
+  ggplot2::scale_color_manual(values = color.cluster)
+HLA_d_pca_1 <- pca_loadings_plot_meta_data(feature ="HLA_d")+ xlim(x_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)
+S100A8_pca_1 <- pca_loadings_plot(feature ="S100A8")+ xlim(x_lim_pc_and_loadings)+
+  ggplot2::scale_color_manual(values = color.cluster)
+
+CD163_pc2 <- pca_loadings_plot_90_titled(feature = "CD163",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings) +ggtitle("CD163")+theme_2_titeled
+LGMN_pc2 <- pca_loadings_plot_90_titled(feature = "LGMN",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings)+ggtitle("LGMN")
+LYZ_pc2 <- pca_loadings_plot_90_titled(feature = "LYZ",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings)+ggtitle("LYZ")
+######
+CD163_pc2 <- pca_loadings_plot_90_titled(feature = "CD163",pc="PC_2")+
+  ggplot2::scale_color_manual(values = color.cluster)+ xlim(y_lim_pc_and_loadings) +ggtitle("CD163")+theme_2_titeled
+
+
+
+
+
+
+##########cluster dendrogram
+
+BAL_macrophages <- BuildClusterTree(object=BAL_macrophages, assay = "RNA")
+
+hclust_BAL <- my_hclust_BuildCLusterTree(BAL_macrophages, assay = "RNA")
+clust_dendro <- ggdendrogram(hclust_BAL)+theme(axis.text.x =element_text(size = size_),
+                                               axis.text.y =element_blank(),
+                                               title = element_blank())
+
+ggsave("dendro.eps")
+###########
+p_pca <- pc1_pc2_titeled+CD163_pc2+LGMN_pc2+LYZ_pc2 +
+  APOC1_pc1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+  HLA_d_pca_1+ plot_spacer()+plot_spacer()+ plot_spacer()+
+  S100A8_pca_1+ #plot_spacer()+plot_spacer()+
+  clust_dendro+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))
+p_pca + scale_y_reverse()
+
+PC_1_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_1)  %>% mutate(pc_squared=((PC_1)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_1<0,"negative", "positive"), gene= fct_reorder(gene,PC_1)) %>% arrange(PC_1) %>% ggplot(aes(PC_1, gene,color=PC_1)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_1, y=gene,yend=gene), size=1)+theme_bw() +
+  scale_color_distiller(
+      palette = "RdYlBu", direction = -1)+
+  theme(legend.position = "none", axis.title = element_blank())
+
+PC_2_lollypop <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_2)  %>% mutate(pc_squared=((PC_2)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_2<0,"negative", "positive"), gene= fct_reorder(gene,PC_2)) %>% arrange(PC_2) %>% ggplot(aes(PC_2, gene,color=PC_2)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_2, y=gene,yend=gene), size=1) +theme_bw() +
+  scale_color_distiller(palette = "RdYlBu", direction = -1)+
+  theme(legend.position = "none", axis.title = element_blank())
+
+  x <- PC_1_lollypop+
+  PC_2_lollypop+
+  wrap_elements(clust_dendro&  theme(text = element_text(size = size_), axis.text =element_text(size = size_) ))+
+  plot_layout(guides = "collect", widths = c(1), heights = c(6))&  theme(text = element_text(size = size_), axis.text =element_text(size = size_) )
+
+
+layout_dings <- "
+AAABBB
+AAABBB
+AAABBB
+CCCDEF
+CCCDEF
+CCCDEF
+GGGHHH
+IIIHHH
+JJJHHH
+"
+a3 <-
+  umap_plot_flipped+#A
+  wrap_elements(dot_plot)+#B
+  pc1_pc2_titeled+#C
+  CD163_pc2+#D
+  LGMN_pc2+#E
+  LYZ_pc2 +#F
+  HLA_d_pca_1+#G
+  wrap_elements(x)+#H
+  S100A8_pca_1+#J
+  APOC1_pc1+#J
+  plot_layout(design = layout_dings, guides = "collect") +
+  plot_annotation(tag_levels = 'A') &  
+  theme(text = element_text(size = size_),
+        axis.text.y  =element_text(size = size_),
+        axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) )
+a3
+a3 <-
+  umap_dens+#A
+  wrap_elements(dot_plot)+#B
+  pc1_pc2_titeled+#C
+  CD163_pc2+#D
+  LGMN_pc2+#E
+  LYZ_pc2 +#F
+  HLA_d_pca_1+#G
+  wrap_elements(x)+#H
+  S100A8_pca_1+#J
+  APOC1_pc1+#J
+  plot_layout(design = layout_dings, guides = "collect") +
+  plot_annotation(tag_levels = 'A') &  
+  theme(text = element_text(size = size_),
+        axis.text.y  =element_text(size = size_),
+        axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) )
+
+
+a3
+ggsave("../output/BAL_comp_umap_fliped_pc.tiff",units = "cm", width =  2.5*17.8 , height = 2.1*17.8)
+
+```
+```{r}
+PC_1_lollypop_defense <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_1)  %>% mutate(pc_squared=((PC_1)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_1<0,"negative", "positive"), gene= fct_reorder(gene,PC_1)) %>% arrange(PC_1) %>% ggplot(aes(PC_1, gene,color=PC_1)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_1, y=gene,yend=gene), size=1)+theme_bw() +
+  scale_color_distiller(
+      palette = "RdYlBu", direction = -1)+
+  theme(legend.position = "none", axis.title = element_blank())+
+  theme_defense_dark
+PC_1_lollypop_defense
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","PC_1_lollypop_defense.png") , bg='transparent', dpi=800, width = 4)
+```
+```{r}
+PC_2_lollypop_dark <- BAL_macrophages@reductions$pca@feature.loadings.projected %>% as_tibble(rownames = "ensg") %>% mutate(gene=genifiy(ensg)) %>% select(gene,PC_2)  %>% mutate(pc_squared=((PC_2)^2)) %>% top_n(pc_squared, n=20) %>% select(-pc_squared) %>% mutate(up_down=if_else(PC_2<0,"negative", "positive"), gene= fct_reorder(gene,PC_2)) %>% arrange(PC_2) %>% ggplot(aes(PC_2, gene,color=PC_2)) + geom_point(size=4)+ geom_segment(aes(x=0,xend=PC_2, y=gene,yend=gene), size=1) +theme_bw() +
+  scale_color_distiller(palette = "RdYlBu", direction = -1)+
+  theme(legend.position = "none", axis.title = element_blank())+
+  theme_defense_dark
+PC_2_lollypop_dark
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","PC_2_lollypop_defense.png") , bg='transparent', dpi=800, width = 4)
+```
+
+```{r}
+BAL_macrophages %>% FeaturePlot(features=ensemblizer_2("SPP1"), reduction = "pca")+ggtitle("SPP1")
+
+BAL_macrophages %>% FeaturePlot(features=ensemblizer_2("CEBPB"), reduction = "pca")+ggtitle("CEBPB")
+
+BAL_macrophages %>% FeaturePlot(features=ensemblizer_2("CD163"), reduction = "pca")+ggtitle("CD163")
+
+BAL_macrophages %>% FeaturePlot(features=ensemblizer_2("LGMN"), reduction = "pca")+ggtitle("LGMN")
+
+BAL_macrophages %>% FeaturePlot(features=ensemblizer_2("LGMN"), reduction = "pca")+ggtitle("LGMN")+scale_color_distiller(palette = "PuBuGn", direction = 1)
+
+BAL_macrophages %>% FeaturePlot(features=ensemblizer_2("PDGFA"), reduction = "pca", cols =c("grey","darkblue","darkblue","purple") )+ggtitle("PDGFA")
+
+gene <- "LGMN"
+
+gene_vec <- c("CD163","LGMN","SPP1","MERTK", "CCL2", "SDC3", "PDGFA", "VEGFA", "TGFB1", "TGFBI", "SDC2")
+plot_dat <- tibble()
+for (gene in gene_vec) {
+  print(gene)
+  dat <- BAL_macrophages %>%FeaturePlot(features=ensemblizer_2(gene), reduction = "pca")
+  dat <- dat$data %>% mutate(gene_name=gene)
+  colnames(dat)[4] <- "expr_value"
+  
+  plot_dat <- bind_rows(plot_dat,dat)
+}
+
+plot_dat %>% group_by(gene_name) %>% 
+  mutate(expr_value=expr_value/max(expr_value)) %>% 
+  mutate(gene=factor(gene),levels(gene_vec)) %>% 
+  arrange(expr_value) %>% 
+  ggplot(aes(PC_1,PC_2, color=expr_value))+
+  geom_point()+
+  facet_wrap("gene_name",nrow =1,)+
+  coord_equal()+scale_color_distiller(palette = "YlOrRd", direction = 1)+
+  theme_minimal()
+
+
+ggsave("../output/Featureplot_PC12.tiff",units = "cm", width =  2.5*17.8 , height = 2.1*17.8)
+```
+
+```{r eval=FALSE, include=FALSE}
+ggsave(plot = PC_1_lollypop,"../output/plots/PC_1_lollypop.svg", height = 3,width = 2)
+ggsave(plot = PC_2_lollypop,"../output/plots/PC_2_lollypop.svg", height = 3,width = 2)
+
+
+```
+
+```{r}
+ (pc1_pc2_titeled+scale_y_reverse()+scale_x_reverse())+
+  (CD163_pc2+scale_x_reverse())+
+  (LGMN_pc2+scale_x_reverse())+
+  (LYZ_pc2+scale_x_reverse()) +
+  (APOC1_pc1+scale_x_reverse())+ 
+  plot_spacer()+
+plot_spacer()+
+  plot_spacer()+
+  (HLA_d_pca_1+scale_x_reverse())+ 
+  plot_spacer()+
+  plot_spacer()+
+  plot_spacer()+
+  (S100A8_pca_1+scale_x_reverse())+ #plot_spacer()+plot_spacer()+
+  plot_spacer()+plot_layout(widths = c(3, 0.5, 0.5,0.5), heights = c(3, 0.5, 0.5,0.5))&  
+  theme(axis.text.y  =element_text(size = 18),
+        axis.text.x  =element_text(size = 18),
+        title=element_text(size = 18) )
+
+ggsave2("../output/pc1_pc2_proj_loadings_switched.tiff", width = 34, height = 19, units = "cm")
+```
+
+```{r}
+y1 <- PC_1_lollypop+
+  PC_2_lollypop  + plot_annotation(tag_levels = 'A') &  
+  theme(text = element_text(size = 24),
+        axis.text.y  =element_text(size = 24),
+        axis.text.x  =element_text(size = 24))
+y1
+ggsave("lollypop.eps")
+```
+
+```{r}
+
+tf <- read_excel("../data/DatabaseExtract_v_1.01.xlsx")
+tf_genes <- tf %>% clean_names() %>%  filter(is_tf=="Yes") %>% pull(hgnc_symbol) %>% unique()
+#matrix_mod<-BAL_macrophages_small_1@assays$RNA@data %>% as.matrix()
+# matrix_mod<-BAL_macrophages@assays$RNA@data[rowSums(BAL_macrophages@assays$RNA@data)>5,] %>% as.matrix()
+#matrix_mod <- matrix_mod[rowSums(matrix_mod)>5,]
+# rownames(matrix_mod) <- rownames(matrix_mod) %>% genifiy_2()
+# cor_list <- list()
+#"CTSL", "CD163", "HLA-DRB1","FABP4","APOE", "TGFBI","TGFB1" )
+genes <- c("CD14","APOC1", "LGMN")
+genes <- c("CD14","S100A8",  "APOC1", "HLA-DRB1", "HLA-DQA1", "C1QA", "LGMN", "CD163", "TFEC")
+
+
+# for (gene_name in genes) {
+#   #gene_name <- "CSF1R"
+#   gene<-as.numeric(matrix_mod[gene_name,])
+# correlations<-apply(matrix_mod,1,function(x){cor(gene,x)})
+# correlations_tbl <- tibble(gene=names(correlations), cor=correlations, cor_gene=gene_name)
+# 
+# cor_list[[gene_name]] <- correlations_tbl
+#   
+# }
+
+cor_tbl <- read_rds("../data/cor_tbl.rds")
+# 
+# # cor_tbl <- cor_list %>% purrr::reduce(bind_rows) #%>% %>% mutate(cor_gene=fct_reorder(cor_gene,.x = genes))
+# 
+# cor_tbl <- cor_list %>% purrr::reduce(bind_rows) %>%  mutate(cor_gene=fct_relevel(cor_gene,genes))
+#write_rds(cor_tbl,"cor_tbl.rds")
+
+top_cor_genes <- cor_tbl %>% filter(gene %in% tf_genes) %>% group_by(cor_gene) %>% slice_max(cor,n=3) %>% pull(gene) %>% unique()
+
+x1 <- c("CEBPB",as.character(top_cor_genes))
+top_cor_genes <- factor(x1, levels=x1)
+
+cor_tbl <- cor_tbl%>%filter(gene%in%top_cor_genes)%>% group_by(cor_gene) %>% arrange(cor,.by_group = TRUE) %>% mutate(gene=fct_inorder(gene))
+
+
+
+cor_hp <- cor_tbl %>%filter(gene%in%top_cor_genes) %>%
+  group_by(cor_gene)%>% ungroup() %>% 
+ggplot(aes(gene,cor_gene, fill=cor)) +geom_tile()+ theme(axis.text.x=element_text(angle = 90))+scale_fill_distiller(
+    palette = "RdBu"
+  )
+cor_hp
+ggsave("../output/BAL_top_3_cor_tf_plus_CEBPB.tiff", height = 10, width = 10 ,units = "cm")
+
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("ETV5"), reduction = "pca")+ggtitle("ETV5")
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("GLMP"), reduction = "pca")+ggtitle("GLMP")
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("NR1H3"), reduction = "pca")+ggtitle("NR1H3")
+FeaturePlot(BAL_macrophages, features = ensemblizer_2("MAFB"), reduction = "pca") + ggtitle("MAFB")
+  ###########
+
+```
+```{r}
+cor_tbl %>% filter(gene=="CEBPB")
+cor_tbl %>%filter(gene=="CEBPB") %>%
+  group_by(cor_gene)%>% ungroup() %>% 
+ggplot(aes(gene,cor_gene, fill=cor)) +geom_tile()+ theme(axis.text.x=element_text(angle = 90))+scale_fill_distiller(
+    palette = "RdBu", values = rescale(c(-0.3,0.3)),
+  )
+```
+
+```{r}
+###loadings without cell embedings
+#PC2 laodings
+genes_sel <- c("CD163", "LGMN", "LYZ")
+dims_sel <- c(1:2)
+dat <- BAL_macrophages@assays$RNA@data[ensemblizer(genes_sel),] %>% as.matrix() %>% t() %>%
+  as_tibble(rownames = "cell")
+colnames(dat) <- c("cell",genifiy(colnames(dat)))
+dat <- BAL_macrophages@reductions$pca@cell.embeddings[,dims_sel] %>% as_tibble(rownames = "cell") %>% left_join(dat)
+
+
+PC_2_top_loaded <- dat %>%
+  pivot_longer(cols = CD163:LGMN, values_to = "value")%>%
+  group_by(name) %>% mutate(scaled_value=scale(value)) %>% mutate(value=value*-1)  %>% 
+  ggplot(aes(PC_2,value))+geom_smooth(aes(color=name))+coord_flip()+theme_2 + xlim(c(y_lim_pc_and_loadings))+ scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+### PC1 loadings
+
+genes_sel <- c("APOC1",
+               "S100A8")
+dims_sel <- c(1:2)
+dat <- BAL_macrophages@assays$RNA@data[ensemblizer(genes_sel),] %>% as.matrix() %>% t() %>% as_tibble(rownames = "cell")
+meta_data_param <- "HLA_d"
+genes_sel %<>% c(meta_data_param)
+dat_meta <- BAL_macrophages[[meta_data_param]] %>% as_tibble(rownames = "cell")
+colnames(dat) <- c("cell",genifiy(colnames(dat)))
+dat %<>%  left_join(dat_meta)
+dat <- BAL_macrophages@reductions$pca@cell.embeddings[,dims_sel] %>% as_tibble(rownames = "cell") %>% left_join(dat)
+
+
+PC_1_top_loaded <- dat %>%
+  pivot_longer(cols = S100A8:HLA_d, values_to = "value") %>%
+  group_by(name) %>% mutate(scaled_value=scale(value))  %>% 
+  ggplot(aes(PC_1,scaled_value))+geom_smooth(aes(color=name))+theme_2 + xlim(x_lim_pc_and_loadings)+ scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+######
+y2 <- pc1_pc2+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3, 0.5), heights = c(3,0.5),guides = 'collect')
+
+
+y3 <- pc1_pc2_dens+PC_2_top_loaded+PC_1_top_loaded+plot_spacer() +plot_layout(widths = c(3, 0.5), heights = c(3,0.5),guides = 'collect')
+y2
+y3
+ggsave("pc1_loaded.eps")
+
+
+pc1_pc2
+
+ggsave("pc1_pc2.tiff", dpi=800)
+```
+```{r}
+getwd()
+```
+
+
+```{r}
+source("../scripts/fibrosis_datasets_effect_size_calc.R")
+
+umap_a_ipf <- module_score_one_umap(object = BAL_macrophages,pattern = "Ayau_IPFeMp_score_fibrosis" )#+ggtitle("Ayau_IPFeMp_score_fibrosis")
+
+
+```
+```{r}
+dat
+```
+
+
+```{r}
+geneset_order_a <- c("Ayau_IPFeMp","Reyf_MCluster1","Mors_1SPP1+MIPF",as.character((unique(dat$geneset))[c((-1),(-8),(-9))]))
+
+geneset_order <- c("Ayau_IPFeMp","Reyf_MCluster1","Mors_1SPP1+MIPF",
+"Reyf_MCluster0" , "Ayau_FABP4+Mp",           
+"Mors_1SPP1+M","Mors_6FCN1+M","Mors_0FABP4+M","Reyf_Mfibrosis"   ,
+"Reyf_MCluster3" ,
+"Reyf_MCluster2",
+"overlap_set",
+"intersect_set")
+
+
+heatmap_effsize <- dat%>% 
+  mutate(geneset=factor(geneset, levels=geneset_order)) |> 
+  filter(geneset!="Adam_ProfibroticM") %>% 
+  ggplot()+geom_tile(aes(x=geneset, y=cluster, fill=cohens_d)) +
+  scale_fill_viridis_c()+geom_point(data =(dat %>% filter(!is.na(sig))) ,aes(x=geneset, y=cluster,color=sig))+scale_color_manual(values = c("not sig"="grey", "sig"="black"))+ scale_y_discrete(names(color.cluster))+
+  theme(axis.text.x=element_text(angle = 45,  hjust=1,),
+        axis.text.y=element_text( colour = color.cluster),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text("gene set"))+ 
+  xlab("gene set")+
+  ylab("BAL cluster")+
+  ggdark::dark_theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+  
+
+
+heatmap_effsize
+ggsave(paste0(path_output_file,"/plots_verteidigung/","heatmap_effsize.png") , bg='transparent', dpi=800, height = 5)
+
+```
+
+
+```{r}
+top_2 <- umap_a_ipf+plot_spacer()+heatmap_effsize
+top_2
+```
+
+#
+
+```{r}
+limits <- c(-0.5,1)
+###Violinplots
+p_ayaub_fib_score_point <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Ayau_IPFeMp"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Ayau_IPFeMp"))
+
+
+Mors_1_SPP_fib_score_point <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Mors_1SPP1+MIPF"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Mors_1SPP1+MIPF"))
+
+Reyf_MCluster1_fib_score_point <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Reyf_MCluster1"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork(limits = limits, p_score=ps%>% filter(Geneset=="Reyf_MCluster1"))
+#######dotplots
+col_axis.genes <- function(x){
+  dings_col <- ifelse(x$data$Gene%in% all_intersect,"red",
+                    ifelse(x$data$Gene%in% common_genes, "green","black"))
+  dings_col <- dings_col[1:length(unique(x$data$Gene))]
+  return(list(theme(axis.text.y = element_text(color=dings_col), axis.text.x = element_text(color="black", size=size_))))
+}
+
+Reyf_MCluster1_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Reyf_MCluster1_lo_corr")
+Reyf_MCluster1_lo_corr_dot_plot <- Reyf_MCluster1_lo_corr_dot_plot+col_axis.genes(Reyf_MCluster1_lo_corr_dot_plot)
+
+Mors_1_SPP_fib_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Mors_1_SPP_fib_lo_corr")
+Mors_1_SPP_fib_lo_corr_dot_plot <- Mors_1_SPP_fib_lo_corr_dot_plot+col_axis.genes(Mors_1_SPP_fib_lo_corr_dot_plot)
+
+Ayau_IPFeMp_lo_corr_dot_plot <- lo_corr_dot_plot_corr("Ayau_IPFeMp_lo_corr")
+Ayau_IPFeMp_lo_corr_dot_plot <- Ayau_IPFeMp_lo_corr_dot_plot+col_axis.genes(Ayau_IPFeMp_lo_corr_dot_plot)
+#######
+
+
+
+
+layout_fib <-"
+ABC
+DEF
+"
+ fib_dotplot <- p_ayaub_fib_score_point+#A
+   Mors_1_SPP_fib_score_point+#B
+    Reyf_MCluster1_fib_score_point+#C
+  Ayau_IPFeMp_lo_corr_dot_plot+#D 
+      Mors_1_SPP_fib_lo_corr_dot_plot+#E
+Reyf_MCluster1_lo_corr_dot_plot+#F
+ # plot_spacer()+#G
+   plot_layout(design = layout_fib,
+               guides = 'collect') +
+  plot_annotation(tag_levels = 'A')&
+  theme(text = element_text(size = size_),
+        # axis.text.y  =element_text(size = size_),
+        # axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) ,
+        legend.key.size = unit(0.1, 'cm')
+  )
+fib_dotplot
+ggsave("../output/fib_dotplot_2.tiff", units = "cm", height = 10)
+```
+```{r}
+p_ayaub_fib_score_vln <- ggplot2::ggplot(
+  data = data_fibrosis%>% filter(Geneset=="Ayau_IPFeMp"),
+  mapping = ggplot2::aes(
+    x    = Cluster,
+    y    = Score,
+    col  = col,
+    fill = Cluster
+  )
+) +score_violin_theme_patchwork_no_points(limits = limits, p_score=ps%>% filter(Geneset=="Ayau_IPFeMp"))
+
+ p_ayaub_fib_score_vln/Ayau_IPFeMp_lo_corr_dot_plot+  plot_layout(guides = 'collect')
+ggsave("../output/plots/p_ayaub_fib_score_point.svg", units = "cm", height = 15, width=13)
+getwd()
+```
+
+
+```{r eval=FALSE, include=FALSE}
+layout_fib <-"
+ABC
+DEF
+GHI
+"
+ comp_plot <- umap_a_ipf+
+   plot_spacer()+
+   heatmap_effsize+
+   p_ayaub_fib_score_point+
+   Mors_1_SPP_fib_score_point+
+    Reyf_MCluster1_fib_score_point+
+  Ayau_IPFeMp_lo_corr_dot_plot+
+      Mors_1_SPP_fib_lo_corr_dot_plot+
+Reyf_MCluster1_lo_corr_dot_plot+
+ # +#G
+   plot_layout(design = layout_fib,
+               guides = 'collect') +
+  plot_annotation(tag_levels = 'A')&
+  theme(text = element_text(size = size_),
+        # axis.text.y  =element_text(size = size_),
+        # axis.text.x  =element_text(size = size_-2),
+        title=element_text(size = size_) ,
+        legend.key.size = unit(0.1, 'cm')
+  )
+
+
+comp_plot
+
+top_2/ fib_dotplot
+```
+Grouping by clustering aids understanding of multidimensional data, even if segregation is rather gradual than discrete as in the BAL macrophage dataset. The granularity of of neighrest neighbor and centroid based method is however dependant on partially arbitrary set points and does not necessarily reflect a degree of segregation. Especially since the oversymplified M1/M2 classification caused a widespread belief that macrophages functions were bipolar and non-ovrlapping here I want to append a Principle Component Analysis (PCA) to account for the graded changes in the data set. It becomes apparent that the underlying three pole architecture of the UMAP that encompasses information of the top 15 PCs, is already present in the first 2 of 15 PCs(Fig A). It can therefore be stated that the remaining PCs are predominantly representative of subgroupings of AM and possess little other information in concern to cell type separation  of FN-1-Mono, AM and LGMN/CD163 Macrophages.
+Strikingly, among the top gene loadings of PC1 were several HLA type II related genes (HLA-D* genes, HLA-DR Gamma Chain (CD74),and the tetraspanin CD81). Negatively associated are markers now typically used for the identification of monocytes in scRNA-seq studies (S100A8/9/12, FCN, VCN). This suggest that this PC1 is representative of the differentiation of monocytes to macrophages which enlarge have higher  antigen presentation capacities  (Iwasaki and Medzhitov 2015). Hence the largest variance in this dataset is constituted by the difference of a monocytic to an alveolar macrophage differentiation. Situated closer to AM on this axis CD163/LGMN macrophages could therefore be viewed to have some typical alveolar macrophage functionionality and additionally functionality described by PC2
+Additionally to proproliferative genes PC2 was strongly associated with cathepsis (CTSL, CTSB, CTSD), endopeptidases integral in lysosomal antigen procession for MHC2 presentation but as well likely involved in extracellular matrix remodeling QUOTE. PC2 is negatively associated with the expression of the antibacterial peptidoglycan cleaving Lysozym. 
+Since the only two known origins of alveolar macrophages are either replenishment from a tissue pool or through haematopoiesis and an accumulation of monocytic markers by macrophages is not known we view CD163/LGMN-macrophages to be of likely recent monocytic origin due to their genespace proximity to monocytes as well as higher expression of monocytic markers such as CD14 then cAMs. 
+AM clusters may be recently tissue derived due to their proximity to mitotically active AMs, however a recent haematopoietic origin can not be excluded.
+
+
+
+```{r}
+avg_exp <- AverageExpression(object = BAL_macrophages,group.by = "Cluster"#, add.ident = "patient"
+                             )
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>%
+  mutate(gene=genifiy_2(gene)) %>% slice_max(Monocytes, n=500) %>% 
+  mutate(is_s100a8= if_else(gene=="S100A8","S100A8", "rest")) %>% 
+  ggplot(aes(fct_reorder(gene, -Monocytes),Monocytes, fill=is_s100a8))+ geom_col()
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
+  mutate(gene=genifiy_2(gene)) %>% 
+  mutate(rank_from_top_monocytes=nrow(.)-rank(Monocytes)) %>% 
+  mutate(rank_from_top_CD163LGMNM=nrow(.)-rank(CD163LGMNM)) %>%
+  mutate(rank_from_top_MonoM=nrow(.)-rank(MonoM)) %>% 
+    mutate(rank_from_top_AM1=nrow(.)-rank(AM1)) %>% 
+  filter(gene %in% c("FTL",
+                     "S100A8",
+                     "S100A9",
+                     "S100A12", 
+                     "APOC1",
+                     "APOE"))
+
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>%  
+ mutate_if(is.numeric, round, digits=3) %>% 
+  mutate(gene=genifiy_2(gene)) %>% 
+  arrange(desc(AM2))
+
+
+avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
+   mutate_if(is.numeric, round, digits=3) %>% 
+  mutate(gene=genifiy_2(gene)) %>% 
+  arrange(desc(CD163LGMNM))
+
+
+
+rownames(
+  avg_exp$RNA %>% as_tibble(rownames = "gene") %>% 
+     mutate_if(is.numeric, round, digits=3) %>% 
+  mutate(gene=genifiy_2(gene))
+) %>% unique() %>% length()
+```
+
+```{r}
+SeuratObj <- RunPCA(BAL_macrophages, verbose = FALSE)
+
+mat <- Seurat::GetAssayData(SeuratObj, assay = "RNA", slot = "scale.data")
+pca <- SeuratObj[["pca"]]
+
+# Get the total variance:
+total_variance <- sum(matrixStats::rowVars(mat))
+
+eigValues = (pca@stdev)^2  ## EigenValues
+varExplained = eigValues / total_variance
+tibble(PC=(1:length(varExplained)),varExplained) %>% ggplot(aes(PC,varExplained))+geom_col()+theme_minimal()
+```
+
+

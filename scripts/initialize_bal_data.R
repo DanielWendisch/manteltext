@@ -1,4 +1,5 @@
 
+
 BAL_macrophages <- load_clean_bal_seurat()
 gene_ensb <- BAL_macrophages@misc$features$SYMBOL
 names(gene_ensb) <- BAL_macrophages@misc$features$ENSEMBL
@@ -18,7 +19,9 @@ BAL_macrophages@misc$colors$Cluster <- color.cluster
 # Retrieve gene set dictionary
 
 
-dictionary <- load_clean_dictionary(path_ = "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\oli_github\\genesets.xlsx")
+
+path_data_file <- "C:\\Users\\danne\\raw_data\\"
+dictionary <- load_clean_dictionary(path_ = paste0(path_data_file,"wendisch_et_al_final\\oli_github\\genesets.xlsx"))
 genesets_covid <- make_genesets(dictionary = dictionary, key = "COVID-19")
 dict_covid <- make_dict(dictionary = dictionary, key = "COVID-19")
 
@@ -35,6 +38,7 @@ BAL_macrophages$ClusternonASCII <- BAL_macrophages$Cluster
 BAL_macrophages$Cluster <- BAL_macrophages$Cluster %>% iconv(from = 'UTF-8', to = 'ASCII//TRANSLIT') %>% str_replace_all( "[[:punct:]]", "") %>% str_remove_all(" ")
 Idents(BAL_macrophages) <- "Cluster"
 BAL_macrophages@assays$SCoV2@key <- "scov2_"
+
 BAL_macrophages <- ScaleData(BAL_macrophages)
 ########
 

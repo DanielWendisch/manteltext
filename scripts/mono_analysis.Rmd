@@ -6,17 +6,289 @@ output: html_notebook
 ```{r}
 library(Seurat)
 library(tidyverse)
+library(tidyseurat)
+
 source(file="functions_bal_macrophages.R")
 #source(file="initialize_bal_data.R")
 source("functions_mono.R")
 ```
 
+
 ```{r}
 
-mono <- "C:/Users/danne/raw_data/wendisch_et_al_final/oli_github/Monocytes.Rds" %>% read_rds()
+mono <- "C:/Users/Danne/raw_data/wendisch_et_al_final/oli_github/Monocytes.Rds" %>% read_rds()
 mono@assays$SCoV2@key <- "scov_"
 DefaultAssay(mono)<- "SCT"
+DefaultAssay(mono)<- "RNA"
+mono@reductions$umap
+mono <- mono |> filter(donor != "Doublet")
+```
+```{r}
+DimPlot(mono )
+```
+```{r}
+feature_select <- "LGMN"
+mono |> join_features(ensemblizer_2(feature_select)) |> ggplot(aes(UMAP_1,UMAP_2, color=.abundance_RNA))+geom_point()+
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.6, 0.6,1)
+                        )+
+  #scale_fill_viridis_c()+
+  # ggtitle(title,
+  #         subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")+
+  labs(color=feature_select)
 
+
+feature_select <- "CD163"
+mono |> join_features(ensemblizer_2(feature_select)) |> ggplot(aes(UMAP_1,UMAP_2, color=.abundance_RNA))+geom_point()+
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.4, 0.6,1)
+                        )+
+  #scale_fill_viridis_c()+
+  # ggtitle(title,
+  #         subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")+
+  labs(color=feature_select)
+
+feature_select <- "SPP1"
+mono |> join_features(ensemblizer_2(feature_select)) |> ggplot(aes(UMAP_1,UMAP_2, color=.abundance_RNA))+geom_point()+
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.4, 0.6,1)
+                        )+
+  #scale_fill_viridis_c()+
+  # ggtitle(title,
+  #         subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (Harmony)")+
+  ylab("umap dim. 2 (Harmony)")+
+  labs(color=feature_select)
+```
+
+```{r}
+mono_feature_plot_umap_defense <- function(feature_select,title=NA, subtitle=""){
+    if (is.na(title)) {title <- feature_select
+  }
+  plot_ <- mono |>
+  join_features(features = ensemblizer_2(feature_select)) |> 
+  ggplot(aes(UMAP_1,UMAP_2,color=.abundance_RNA)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+mono_feature_plot_umap_defense_meta_data_pc <- function(feature_select, title=NA, subtitle=""){
+  if (is.na(title)) {title <- feature_select
+  }
+  
+  plot_ <- mono |>
+  select(feature_select, UMAP_1, UMAP_2) |> 
+  ggplot(aes_string("UMAP_1","UMAP_2",color=feature_select)) +
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.30, 0.7, 0.9,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+
+mono_umap_defense_meta_data_pc <- function(feature_select, title=NA, subtitle=""){
+  if (is.na(title)) {title <- feature_select
+  }
+  
+  plot_ <- mono |>
+  select(feature_select, UMAP_1, UMAP_2) |> 
+  ggplot(aes_string("UMAP_1","UMAP_2",color=feature_select)) +
+  geom_point(alpha=0.9, shape=16)+
+  # scale_color_viridis_c(values = c(0, 0.30, 0.7, 0.9,1)
+  #                       )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  labs(color=feature_select)
+  return(plot_)
+}
+
+
+```
+
+```{r}
+
+cbPalette <- c(
+  "#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+  "#0072B2", "#D55E00", "#CC79A7"
+)
+color.condition <- c(
+  "Control"    = cbPalette[1],
+  "SARS-CoV-2" = cbPalette[7],
+  "3p-hpRNA"   = cbPalette[4],
+  "R848"       = cbPalette[6]
+)
+
+mono_umap_defense_meta_data_pc("condition")+
+  ggplot2::scale_color_manual(values = color.condition)
+ggsave(paste0(path_output_file,"/plots_verteidigung/","mono_umap_condition", ".png") , bg='transparent', dpi=800)
+  ```
+
+
+```{r}
+mono_feature_plot_umap_defense_meta_data_pc("Ayau_IPFeMp_score_fibrosis")
+```
+
+```{r}
+mono_meta_data_boxplot <- function(feature_select, title=NA, subtitle=""){
+  if (is.na(title)) {title <- feature_select
+  }
+  
+  plot_ <- mono |> 
+  
+  ggplot(aes_string("condition",feature_select)) +
+  geom_jitter(size=0.3,alpha=0.5) +
+  geom_boxplot(outliers = F) +
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12),
+        axis.text = element_text(size=12, face = "bold")
+        )
+  return(plot_)
+}
+
+
+```
+```{r}
+mono_meta_data_boxplot("Ayau_IPFeMp_score_fibrosis")
+ggsave(paste0(path_output_file,"/plots_verteidigung/","mono_meta_data_boxplot_ayaub_", ".png") , bg='transparent', dpi=800)
+```
+```{r}
+
+mono_meta_data_boxplot_2 <- function(feature_select,feature_group, title=NA, subtitle="", y_label=""){
+  if (is.na(title)) {title <- feature_select
+  }
+  
+  plot_ <- mono |> 
+  
+  ggplot(aes_string("condition",feature_select, color=feature_group)) +
+  geom_jitter(size=0.3,alpha=0.5) +
+  geom_boxplot(outliers = F) +
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle)+
+  ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12),
+        axis.text = element_text(size=12, face = "bold")
+        )+
+    ylab(y_label)
+  return(plot_)
+}
+
+```
+```{r}
+mono_meta_data_boxplot_2("Ayau_IPFeMp_score_fibrosis","donor",title = "Ayaub et al. module score" , y_label = "Ayaub et al. module score")
+ggsave(paste0(path_output_file,"/plots_verteidigung/","mono_meta_data_boxplot_2_ayaub_", ".png") , bg='transparent', dpi=800)
+
+```
+
+```{r}
+mono |> ggplot(aes(condition,Ayau_IPFeMp_score_fibrosis))+geom_boxplot(outliers = F)
+```
+```{r}
+genes <- list(
+  "Control"    = c(
+    "LYZ", "LCP1"
+  ),
+  "SARS-CoV-2" = c(
+    "TGFBI", "GLUL", "MMP9", "CD84", "S100A6", "CAPG", "MRC1",
+    "CD163", "LGMN", "CD9", "MERTK", "SLAMF8", "CMKLR1", "NRP1", "ADAP2",
+    "SPRED1", "CALR"
+  ),
+  "3p-hpRNA"   = c(
+    "IFIT1", "IFITM3", "IFIT3", "ISG15", "TNFSF10", "IFI6", "IFI44L"
+  ),
+  "R848"       = c(
+    "CCL3", "IL1B", "CCL3L1", "CCL4", "IL6", "POU2F2", "CCL4L2"
+  )
+)
+```
+
+```{r}
+mono_feature_plot_umap_defense("LGMN")
+mono_feature_plot_umap_defense("CD163")
 ```
 ```{r}
 mono%>% DimPlot(reduction = "umap")

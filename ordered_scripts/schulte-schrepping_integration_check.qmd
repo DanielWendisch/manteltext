@@ -1,0 +1,790 @@
+---
+title: "clustering evaluation"
+format: html
+editor: visual
+---
+```{r}
+library(DESeq2)
+library(Seurat)
+library("textTinyR")
+library(tidyverse)
+library(ggrepel)
+library(BPCells)
+library(tidyseurat)
+library(SeuratWrappers)
+library(extrafont)
+#font_import()
+loadfonts(device = "win")
+```
+
+```{r}
+path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_output_file <- "..\\output\\"
+setwd("C:/Users/Danne/R_projects/manteltext/")
+```
+
+```{r}
+obj <- read_rds( "../intermediate_data/schulte_schrepping_10x_berlin.rds")
+```
+
+# create combined metadata column
+
+
+
+```{r BPCells conversion}
+getwd()
+if (!file.exists("../intermediate_data/schulte_schrepping_berlin_monocytes_bpcells.rds")) {
+  # store counts matrix as BPcells object while keeping metadata
+seurat_monocytes <-  read_rds(paste0(path_data_file,
+                                     "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
+
+write_matrix_dir(mat = seurat_monocytes[["RNA"]]$counts, dir = 'BPCells_matrices/schulte_schrepping_berlin_monocytes')
+counts.mat <- open_matrix_dir(dir = 'BPCells_matrices/schulte_schrepping_berlin_monocytes')
+
+meta_data <- seurat_monocytes@meta.data
+seurat_monocytes <- CreateSeuratObject(counts = counts.mat)
+seurat_monocytes@meta.data <- meta_data
+
+write_rds(seurat_monocytes, "intermediate_data/schulte_schrepping_berlin_monocytes_bpcells.rds")
+rm(list = ls())
+
+}
+
+```
+# sketched data, probalby erase
+```{r}
+obj <- read_rds( "intermediate_data/schulte_schrepping_berlin_monocytes_bpcells")
+keep <- obj |> count(sampleID) |> filter(n>100) |> pull(sampleID)
+obj <- obj |> filter(sampleID %in% keep)
+obj <- NormalizeData(obj)
+obj[["RNA"]] <- split(obj[["RNA"]], f = obj$sampleID)
+obj <- FindVariableFeatures(obj)
+
+
+obj <- SketchData(object = obj, ncells = 30, method = "LeverageScore", sketched.assay = "sketch")
+DefaultAssay(obj) <- "sketch"
+write_rds(obj, "intermediate_data/schulte_Schrepping_10x_berlin_sketched.rds")
+
+```
+
+
+```{r process unintegrated}
+if (!file.exists("C:/Users/Danne/R_projects/manteltext/intermediate_data/schulte_schrepping_berlin_monocytes_bpcells.rds")) {
+  obj <- read_rds("C:/Users/Danne/R_projects/manteltext/intermediate_data/schulte_schrepping_berlin_monocytes_bpcells.rds")
+keep <- obj |> count(sampleID) |> filter(n>100) |> pull(sampleID)
+obj <- obj |> filter(sampleID %in% keep)
+obj[["RNA"]] <- split(obj[["RNA"]], f = obj$sampleID)
+obj <- NormalizeData(obj)
+obj <- FindVariableFeatures(obj)
+obj <- ScaleData(obj)
+obj <- RunPCA(obj)
+
+obj <- FindNeighbors(obj, dims = 1:10, reduction = "pca")
+obj <- FindClusters(obj,  cluster.name = "unintegrated_clusters")
+
+obj <- FindNeighbors(obj, dims = 1:10, reduction = "pca")
+obj <- FindClusters(obj,  cluster.name = "unintegrated_clusters")
+
+obj <- RunUMAP(obj, dims = 1:10, reduction = "pca", reduction.name = "umap.unintegrated")
+  
+}
+
+# visualize by batch and cell type annotation
+# cell type annotations were previously added by Azimuth
+```
+```{r}
+DimPlot(obj, reduction = "umap.unintegrated", group.by = c( "cluster_clean"))
+DimPlot(obj, reduction = "umap.unintegrated", group.by = c("sampleID"))
+DimPlot(obj, reduction = "umap.unintegrated", group.by = c("experiment"))
+```
+
+```{r}
+obj <- read_rds("../intermediate_data/schulte_schrepping_10x_berlin.rds")
+
+DimPlot(obj, reduction = "umap.unintegrated", group.by = c( "cluster_clean"))
+DimPlot(obj, reduction = "umap.unintegrated", group.by = c("sampleID"))
+DimPlot(obj, reduction = "umap.unintegrated", group.by = c("experiment"))
+
+```
+
+```{r}
+
+```
+
+```{r}
+if ( FALSE # not calculated because of exessive cumputing times
+  #!"integrated.cca" %in% names(obj@reductions)
+    ) {
+  
+  library(future)
+plan("multicore", workers = 8)
+options(future.globals.maxSize = 1300 * 1024^2)
+obj <- IntegrateLayers(
+  object = obj, method = CCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.cca",
+  verbose = FALSE
+)
+
+obj <- FindNeighbors(obj, reduction = "integrated.cca", dims = 1:30)
+obj <- FindClusters(obj, resolution = 2, cluster.name = "cca_clusters")
+obj <- RunUMAP(obj, reduction = "integrated.cca", dims = 1:30, reduction.name = "umap.cca")
+
+write_rds(obj, "../intermediate_data/schulte_schrepping_10x_berlin.rds")
+
+  
+}
+
+
+if ( FALSE # not calculated because of exessive cumputing times
+  #!"integrated.rpca" %in% names(obj@reductions)
+    ) {
+  obj <- IntegrateLayers(
+  object = obj, method = RPCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.rpca",
+  verbose = FALSE,
+)
+write_rds(obj, "../intermediate_data/schulte_schrepping_10x_berlin.rds")
+  
+}
+
+
+if ( !"umap.harmony" %in% names(obj@reductions)
+    ) {
+  obj <- IntegrateLayers(
+  object = obj, method = HarmonyIntegration,
+  orig.reduction = "pca", new.reduction = "harmony",
+  verbose = FALSE
+)
+
+obj <- FindNeighbors(obj, reduction = "harmony", dims = 1:30)
+obj <- FindClusters(obj,resolution = 0.2, cluster.name = "harmony_clusters")
+
+obj <- RunUMAP(obj, reduction = "harmony", dims = 1:30, reduction.name = "umap.harmony")
+Idents(obj) <- "cluster_clean"
+write_rds(obj, "../intermediate_data/schulte_schrepping_10x_berlin.rds")
+}
+
+
+if ( !"umap.mnn" %in% names(obj@reductions)
+    ) {
+  obj <- IntegrateLayers(
+  object = obj, method = FastMNNIntegration,
+  new.reduction = "integrated.mnn",
+  verbose = FALSE
+  )
+  obj <- FindNeighbors(obj, reduction = "integrated.mnn", dims = 1:30)
+  obj <- FindClusters(obj,resolution = 0.2, cluster.name = "mnn_clusters")
+  obj <- FindClusters(obj,resolution = 0.1, cluster.name = "harmony_clusters_res0.1")
+  obj <- RunUMAP(obj, reduction = "integrated.mnn", dims = 1:30, reduction.name = "umap.mnn")
+  obj <- RunPCA(obj, reduction = "integrated.mnn", dims = 1:30, reduction.name = "pca_mnn")
+  
+  write_rds(obj, "../intermediate_data/schulte_schrepping_10x_berlin.rds")
+}
+
+
+
+# obj <- IntegrateLayers(
+#   object = obj, method = SeuratWrappers::scVIIntegration,
+#   new.reduction = "integrated.scvi",
+#   #conda_env = "../miniconda3/envs/scvi-env", 
+#   verbose = FALSE
+# )
+```
+
+# harmony
+```{r}
+Idents(obj) <- "cluster_clean"
+
+DimPlot(obj, reduction = "umap.harmony", group.by = c( "cluster_clean"))
+DimPlot(obj, reduction = "umap.harmony", group.by = c( "cluster_clean"),order ="hla_d_rhi_cd83_monocytes" )
+DimPlot(obj, reduction = "umap.harmony", cells.highlight = WhichCells(obj,idents ="hla_d_rhi_cd83_monocytes" ) ) + ggtitle("hla_d_rhi_cd83_monocytes")
+
+DimPlot(obj, reduction = "umap.harmony", cells.highlight = WhichCells(obj,idents ="hla_d_rlo_s100a_monocytes" ) ) + ggtitle("hla_d_rlo_s100a_monocytes")
+DimPlot(obj, reduction = "umap.harmony", cells.highlight = WhichCells(obj,idents ="classical_monocytes" ) ) + ggtitle("classical_monocytes")
+
+DimPlot(obj, reduction = "umap.harmony", group.by = c("mnn_clusters"))
+
+DimPlot(obj, reduction = "umap.harmony", group.by = c("group_per_sample"), label = T)
+DimPlot(obj, reduction = "umap.harmony", group.by = c("sampleID"))
+DimPlot(obj, reduction = "umap.harmony", group.by = c("experiment"), label = T)
+
+```
+
+
+
+```{r}
+Idents(obj) <- "cluster_clean"
+
+obj <- obj |> mutate(combined_clusters=case_when(mnn_clusters %in% c(0,1,4) ~  "classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical")) 
+
+DimPlot(obj, reduction = "umap.mnn", group.by = c( "cluster_clean"))
+DimPlot(obj, reduction = "umap.mnn", group.by = c( "cluster_clean"),order ="hla_d_rhi_cd83_monocytes" )
+DimPlot(obj, reduction = "umap.mnn", cells.highlight = WhichCells(obj,idents ="hla_d_rhi_cd83_monocytes" ) ) + ggtitle("hla_d_rhi_cd83_monocytes")
+DimPlot(obj, reduction = "umap.mnn", cells.highlight = WhichCells(obj,idents ="hla_d_rlo_s100a_monocytes" ) ) + ggtitle("hla_d_rlo_s100a_monocytes")
+
+Idents(obj) <- "group_per_sample"
+DimPlot(obj, reduction = "umap.mnn", cells.highlight = WhichCells(obj,idents ="severe" ) ) + ggtitle("severe")
+DimPlot(obj, reduction = "umap.mnn", cells.highlight = WhichCells(obj,idents ="mild" ) ) + ggtitle("mild")
+DimPlot(obj, reduction = "umap.mnn", cells.highlight = WhichCells(obj,idents ="control" ) ) + ggtitle("control")
+
+Idents(obj) <- "cluster_clean"
+DimPlot(obj, reduction = "umap.mnn", cells.highlight = WhichCells(obj,idents ="classical_monocytes" ) ) + ggtitle("classical_monocytes")
+
+DimPlot(obj, reduction = "umap.mnn", group.by = c("mnn_clusters"))
+DimPlot(obj, reduction = "umap.mnn", group.by = c("harmony_clusters_res0.1"))
+
+
+  DimPlot(obj, reduction = "umap.mnn", group.by = c("group_per_sample"))
+DimPlot(obj, reduction = "umap.mnn", group.by = c("sampleID"))
+DimPlot(obj, reduction = "umap.mnn", group.by = c("experiment"))
+
+DimPlot(obj, reduction = "pca_mnn", group.by =  c("mnn_clusters"))
+DimPlot(obj, reduction = "pca_mnn", group.by =  c("mnn_clusters"), dims = c(2,3))
+
+FeaturePlot(obj, reduction = "pca_mnn", features = c("RPS27", "FOSB", "TMSB4X", "RACK1"))
+FeaturePlot(obj, reduction = "pca_mnn", features = c("HLA-DPA1", "FCGR3A", "S100A8", "VCAN"), dims = c(2,3))
+
+obj@reductions$pca_mnn |> str()
+
+
+
+pp <- obj |> ggplot(aes(-umapmnn_1, umapmnn_2, color =mnn_clusters ))+geom_point()+ coord_fixed()+ggdark::dark_theme_bw() 
+
+ggsave("myplot.svg", p, bg='transparent')
+getwd()
+```
+
+```{r}
+obj <- JoinLayers(obj)
+Idents(obj) <- "mnn_clusters"
+mnn_cluster_4 <- FindMarkers(object = obj,ident.1 = 4)
+mnn_cluster_4 |> as_tibble(rownames = "gene") |> filter(avg_log2FC>0) |> arrange(p_val)
+
+mnn_cluster_0 <- FindMarkers(object = obj,ident.1 = 0)
+mnn_cluster_0 |> as_tibble(rownames = "gene") |> filter(avg_log2FC>0) |> arrange(p_val)
+
+mnn_cluster_0_vs_4 <- FindMarkers(object = obj,ident.1 = 0,ident.2 = 4)
+mnn_cluster_0_vs_4 |> as_tibble(rownames = "gene") |> filter(avg_log2FC>0) |> arrange(p_val)
+mnn_cluster_0_vs_4 |> as_tibble(rownames = "gene") |> filter(avg_log2FC<0) |> arrange(p_val)
+mnn_cluster_4
+```
+```{r}
+"CSF3R"
+genes <- c("FOSB", "CIITA", "JUNB", "S100A8", "S100A9", "S100A12","LGMN","FCGR3A")
+obj |> FeaturePlot(features = genes, reduction = "umap.mnn", slot = "scale.data")
+genes <-c("S100A4", "IFI44L", "COX7C", "PARP14", "SIGLEC1", "DDX21", "NFKBIZ", "SECISBP2L", "HLA-DRA", "CD14" )
+obj |> FeaturePlot(features = genes, reduction = "umap.mnn", slot = "data")
+
+
+
+obj$hla2_gene_mean <-  sdf |>  mutate(rowmean = rowMeans(across(where(is.numeric)))) |> pull(rowmean)
+dings |> as_tibble()
+
+obj$calprotectin <- collect_features(source =obj@assays$RNA$data,features = c("S100A8","S100A9","S100A12") )|> mutate(sum_scaled = rowSums(across(where(is.numeric)))) |> pull(sum_scaled)
+
+FeaturePlot(obj,"hla2_gene_sum", reduction = "umap.mnn",cols = c("blue","grey","red")) 
+
+FeaturePlot(obj,"hla2_gene_sum", reduction = "umap.mnn",cols = c("blue","grey","red")) 
+
+
+
+FeaturePlot(obj,HLA2_genes, reduction = "umap.mnn")
+FeaturePlot(obj,rownames(obj)[rownames(obj) |> str_detect("HLA-D")], reduction = "umap.mnn")
+
+FeaturePlot(obj,rownames(obj)[rownames(obj) |> str_detect("S100")], reduction = "umap.mnn")
+rownames(obj)[rownames(obj) |> str_detect("HLA-D")]
+
+
+FeaturePlot(obj,"hla2_gene_sum_scaled", reduction = "umap.mnn",cols = c("blue","grey","red")) 
+FeaturePlot(obj,"calprotectin", reduction = "umap.mnn",cols = c("blue","grey","red"))
+FeaturePlot(obj,"CCR2", reduction = "umap.mnn",cols = c("blue","grey","red"))
+
+FeaturePlot(obj,"CX3CR1", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"ITGAX", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"CCR1", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"CCR2", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"ITGAM", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"FCER1A", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+
+
+FeaturePlot(obj,"SIGLEC1", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"AXL", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"CD14", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+FeaturePlot(obj,"FCGR3A", reduction = "umap.mnn",cols = c("blue","red","red","red"))
+
+
+p2 <- FeaturePlot(obj,"FCGR3A", reduction = "umap.mnn",cols = c("#21918c","#fde725","#fde725","#fde725"), alpha = 0.5, pt.size = 1.5, ) + scale_x_reverse()+ coord_fixed()+ggdark::dark_theme_bw() +
+  ggtitle("FCGR3A (CD16)")+
+  theme(plot.title = element_text(hjust = 0.5, family = "Calibri", size=18), title = element_text(family = "Calibri"),text = element_text(family = "Calibri"), axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (multiple nearest neighbor integration)")+
+  ylab("umap dim. 2 (multiple nearest neighbor integration)")
+
+p2 <- FeaturePlot(obj,"FCGR3A", reduction = "umap.mnn",cols = c("#21918c","#fde725","#fde725","#fde725"), alpha = 0.5, pt.size = 1.5, ) + scale_x_reverse()+ coord_fixed()+ggdark::dark_theme_bw() +
+  ggtitle("FCGR3A (CD16)")+
+  theme(plot.title = element_text(hjust = 0.5, family = "Calibri", size=18), title = element_text(family = "Calibri"),text = element_text(family = "Calibri"), axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (multiple nearest neighbor integration)")+
+  ylab("umap dim. 2 (multiple nearest neighbor integration)")
+
+dims_tbl <- collect_features(source=obj@reductions$umap.mnn@cell.embeddings, features = c("umapmnn_1","umapmnn_2")) |> as_tibble()
+
+dims_tbl <- obj@reductions$umap.mnn@cell.embeddings |> as_tibble()
+
+p3 <- tibble(
+  "FCGR3A"=collect_features(source =obj@assays$RNA$data,features = c("FCGR3A")) |> pull(FCGR3A)
+  ) |> bind_cols(dims_tbl) |> ggplot(aes(-umapmnn_1, umapmnn_2, #fill =FCGR3A,
+                                         color=FCGR3A
+                                         ))+geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c()+
+  scale_fill_viridis_c()+
+  ggtitle("FCGR3A (CD16)",subtitle = "log1p normalized")+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5, family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5, family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),text = element_text(family = "Calibri"), axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")
+
+
+
+
+
+mnn_umap_dotplot <- function( feature, title=NA, subtitle_="log1p normalized",subtitle = "log1p normalized"){
+ # browser()
+  if (is.na(title)) {title <- feature}
+  
+  #dims_tbl <- collect_features(source=obj@reductions$umap.mnn@cell.embeddings, features = c("umapmnn_1","umapmnn_2")) |> as_tibble()
+
+dims_tbl <- obj@reductions$umap.mnn@cell.embeddings |> as_tibble()
+
+plot_ <- tibble(
+  feature=collect_features(source =obj@assays$RNA$data,features = feature) |> pull({{feature}})
+  ) |> bind_cols(dims_tbl)
+
+#browser()
+plot_ <- plot_ |> 
+  ggplot(aes(-umapmnn_1, umapmnn_2,  color=feature))+
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c()+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle_)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")+
+  labs(color=feature)
+
+return(plot_)
+  
+}
+                 
+
+
+
+
+
+p3
+p2
+ggsave("myplot_2.png", p2, bg='transparent', dpi=700)
+ggsave("myplot_3.png", p3, bg='transparent', dpi=700)
+
+#fde725
+#21918c
+```
+```{r}
+Idents(obj) <- "mnn_clusters"
+mnn_cluster_2 <- FindMarkers(object = obj,ident.1 = 2, max.cells.per.ident =300) |> as_tibble(rownames="gene")
+
+mnn_cluster_2 #|> filter(avg_log2FC>0)
+```
+
+
+
+```{r}
+obj |> ggplot(aes(group_per_sample, fill = cluster_clean)) +
+  geom_bar()
+
+
+
+obj |> 
+  group_by(group_per_sample,mnn_clusters)|>
+  mutate(n=n()) |> 
+  group_by(group_per_sample) |> 
+  mutate(percentage=n/(sum(n))) |> 
+  ggplot(aes(group_per_sample,percentage, fill = mnn_clusters)) +
+  geom_col()
+
+
+x <- obj |> 
+  select(sampleID,group_per_sample,mnn_clusters) |> 
+  group_by(sampleID,mnn_clusters,group_per_sample)|>
+  summarise(n=n()) |> 
+  group_by(sampleID,group_per_sample) |> 
+  mutate(percentage=n/(sum(n))) |> 
+  ungroup() |> 
+  mutate(sample_group=paste0(sampleID,"&",group_per_sample )) |> 
+  mutate(group_order=as.factor(group_per_sample)) |> 
+
+  mutate(group_order_num=as.numeric(group_order)) 
+
+
+x |> 
+  #select(sample_group,group_per_sample)
+  mutate(sample_group= fct_reorder(sample_group,group_order_num)) |> 
+  ggplot(aes( sample_group,percentage , fill = mnn_clusters)) +
+  geom_col() +
+  guides(x = ggh4x::guide_axis_nested(delim = "&"))+
+  theme(axis.text.x = element_text(angle = 34, hjust = 1))
+```
+
+
+```{r}
+x <- obj |> 
+ # filter(group_per_sample != "control") |> 
+  select(sampleID,group_per_sample,mnn_clusters,days_after_onset) |> 
+  group_by(sampleID,mnn_clusters,group_per_sample, days_after_onset)|>
+  summarise(n=n()) |> 
+  group_by(sampleID,group_per_sample) |> 
+  mutate(percentage=n/(sum(n))) |> 
+  ungroup() |> 
+  mutate(sample_group=paste0(sampleID,"&",days_after_onset )) |> 
+  mutate(group_order=as.factor(days_after_onset)) |> 
+
+  mutate(group_order_num=as.numeric(days_after_onset))  |> 
+  mutate(combined_clusters=case_when(mnn_clusters %in% c(0,1,4) ~  "classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical")) 
+
+
+x |> 
+  #select(sample_group,group_per_sample)
+  mutate(sample_group= fct_reorder(sample_group,group_order_num)) |> 
+  ggplot(aes( sample_group,percentage , fill = mnn_clusters)) +
+  geom_col() +
+  guides(x = ggh4x::guide_axis_nested(delim = "&"))+
+  theme(axis.text.x = element_text(angle = 34, hjust = 1))+facet_wrap(~group_per_sample)
+
+
+
+
+x |> 
+  #select(sample_group,group_per_sample)
+  mutate(sample_group= fct_reorder(sample_group,group_order_num)) |> 
+  ggplot(aes( sample_group,n , fill = mnn_clusters)) +
+  geom_col() +
+  guides(x = ggh4x::guide_axis_nested(delim = "&"))+
+  theme(axis.text.x = element_text(angle = 34, hjust = 1))+facet_wrap(~group_per_sample)
+
+x |> ggplot(aes(percentage,))
+```
+
+
+```{r}
+x_combined_clusters <- obj |> 
+ # filter(group_per_sample != "control") |> 
+    mutate(combined_clusters=case_when(mnn_clusters %in% c(0,1,4) ~  "classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical")) |> 
+  select(sampleID,group_per_sample,combined_clusters,days_after_onset) |> 
+  group_by(sampleID,combined_clusters,group_per_sample, days_after_onset)|>
+  summarise(n=n()) |> 
+  group_by(sampleID,group_per_sample) |> 
+  mutate(percentage=n/(sum(n))) |> 
+  ungroup() |> 
+  mutate(sample_group=paste0(sampleID,"&",days_after_onset )) |> 
+  mutate(group_order=as.factor(days_after_onset)) |> 
+
+  mutate(group_order_num=as.numeric(days_after_onset)) |> 
+    mutate(sample_group= fct_reorder(sample_group,group_order_num))
+
+x_combined_clusters |> 
+  #select(sample_group,group_per_sample)
+  ggplot(aes( sample_group,percentage , fill = combined_clusters)) +
+  geom_col() +
+  guides(x = ggh4x::guide_axis_nested(delim = "&"))+
+  theme(axis.text.x = element_text(angle = 34, hjust = 1))+
+  facet_wrap(~group_per_sample)
+
+x_combined_clusters |> 
+  ggplot(aes(group_per_sample,percentage)) +
+  geom_boxplot()+
+  geom_point()+
+  facet_wrap(~combined_clusters)
+
+x |> 
+  ggplot(aes(group_per_sample,percentage)) +
+  geom_boxplot()+
+  geom_point()+
+  facet_wrap(~mnn_clusters)+
+  theme_dark()
+
+
+
+x |> 
+ # filter(group_per_sample != "control") |> 
+    mutate(named_mnn_clusters=case_when(mnn_clusters == 0 ~  "S100-classical",
+                                       mnn_clusters  ==  1 ~  "unactivated classical",
+                                       mnn_clusters  ==  4 ~  "IFN-classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical"))
+  ggplot(aes(group_per_sample,percentage)) +
+  geom_boxplot()+
+  geom_point()+
+  facet_wrap(~combined_clusters, scales = "free")
+```
+
+
+```{r}
+
+obj <- obj|> 
+ # filter(group_per_sample != "control") |> 
+    mutate(named_mnn_clusters=case_when(mnn_clusters == 0 ~  "S100-classical",
+                                       mnn_clusters  ==  1 ~  "unactivated classical",
+                                       mnn_clusters  ==  4 ~  "IFN-classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical"))
+```
+
+```{r}
+obj |> mutate(combined_clusters=case_when(mnn_clusters == 0 ~  "S100-classical",
+                                       mnn_clusters  ==  1 ~  "unactivated classical",
+                                       mnn_clusters  ==  4 ~  "IFN-classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical")) |> 
+  ggplot(aes(cluster_clean, fill = combined_clusters))+
+  geom_bar(position = "fill")
+
+obj|> mutate(combined_clusters=case_when(mnn_clusters == 0 ~  "S100-classical",
+                                       mnn_clusters  ==  1 ~  "unactivated classical",
+                                       mnn_clusters  ==  4 ~  "IFN-classical",
+                                     mnn_clusters == 2 ~ "intermediate",
+                                     mnn_clusters == 3 ~ "non-classical"))  |> ggplot(aes(combined_clusters, fill = cluster_clean))+
+  geom_bar(position = "fill")
+```
+```{r}
+theme_defense <-   theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")
+
+
+obj |> ggplot(aes(-umapmnn_1, umapmnn_2))+geom_point(alpha=0.4, shape=16)+ coord_fixed()+ggdark::dark_theme_bw() +
+    coord_fixed()+ggdark::dark_theme_bw()+theme_defense
+
+
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","no_grouping_", "_mono_berlin_umap_fastMNN.png") , bg='transparent', dpi=800)
+
+```
+```{r}
+obj |> ggplot(aes(-umapmnn_1, umapmnn_2, color=mnn_clusters))+geom_point(shape=16, alpha = 0.5)+ coord_fixed()+ggdark::dark_theme_bw() +
+    coord_fixed()+ggdark::dark_theme_bw()+
+  ggtitle("Leiden clustering", subtitle = "resolution")
+  theme_defense
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","mnn_clusters_numbered", "_mono_berlin_umap_fastMNN.png") , bg='transparent', dpi=800)
+```
+```{r}
+obj |> ggplot(aes(-umapmnn_1, umapmnn_2, color=named_mnn_clusters))+geom_point(shape=16, alpha = 0.5)+ coord_fixed()+ggdark::dark_theme_bw() +
+    coord_fixed()+ggdark::dark_theme_bw()+
+  ggtitle("Leiden clustering", subtitle = "resolution")
+  theme_defense
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","mnn_clusters_numbered", "_mono_berlin_umap_fastMNN.png") , bg='transparent', dpi=800)
+```
+
+```{r}
+obj |> ggplot(aes(-umapmnn_1, umapmnn_2, color=combined_clusters))+geom_point(shape=16,alpha = 0.5)+ coord_fixed()+ggdark::dark_theme_bw() +
+    coord_fixed()+ggdark::dark_theme_bw()+theme_defense
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","no_grouping_", "_mono_berlin_umap_fastMNN.png") , bg='transparent', dpi=800)
+```
+```{r}
+
+
+obj |> ggplot(aes(-umapmnn_1, umapmnn_2, color=group_per_sample))+
+  geom_point(shape=16, alpha = 0.1, color="white")+
+  geom_density_2d(bins=10, linejoin = "round", linewidth = 1)+
+  ggdark::dark_theme_bw() +
+  
+  coord_fixed()+
+  ggdark::dark_theme_bw()+
+  ggtitle("Embedding density of severity groups", subtitle = "resolution")+
+  theme_defense+
+  labs(legend="severity")+
+  xlim(-6.3,10)+
+  ylim(-8,5.8)
+
+ggsave(paste0(path_output_file,"/plots_verteidigung/","umap_density_severity", "_mono_berlin_umap_fastMNN.png") , bg='transparent', dpi=800)
+
+```
+
+
+```{r}
+mnn_umap_dotplot <- function( feature, title=NA, subtitle_="log1p normalized",subtitle = "log1p normalized", from_meta_data=FALSE){
+ # browser()
+  if (is.na(title)) {title <- feature}
+  
+  #dims_tbl <- collect_features(source=obj@reductions$umap.mnn@cell.embeddings, features = c("umapmnn_1","umapmnn_2")) |> as_tibble()
+
+dims_tbl <- obj@reductions$umap.mnn@cell.embeddings |> as_tibble()
+if (!from_meta_data) {plot_ <- tibble(
+  feature=collect_features(source =obj@assays$RNA$data,features = feature) |> pull({{feature}})
+  ) |> bind_cols(dims_tbl)
+}else {plot_ <- tibble(
+  feature=obj@meta.data[,feature]
+  ) |> bind_cols(dims_tbl)}
+
+#browser()
+plot_ <- plot_ |> 
+  ggplot(aes(-umapmnn_1, umapmnn_2,  color=feature))+
+  geom_point(alpha=0.5, shape=16)+
+  scale_color_viridis_c(values = c(0, 0.17, 0.35, 0.5,1)
+                        )+
+  #scale_fill_viridis_c()+
+  ggtitle(title,
+          subtitle = subtitle_)+
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,
+                                  family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,
+                                     family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))+
+  xlab("umap dim. 1 (FastMNN)")+
+  ylab("umap dim. 2 (FastMNN)")+
+  labs(color=feature)
+
+return(plot_)
+  
+}
+
+```
+
+```{r}
+feature_for_plot <- ("FCGR3A")
+mnn_umap_dotplot(feature = feature_for_plot)
+ggsave(paste0(path_output_file,"/plots_verteidigung/",feature_for_plot, "_mono_berlin_umap_fastMNN.png") , bg='transparent', dpi=800)
+```
+
+
+```{r}
+feature_for_plot <- ("CD14")
+mnn_umap_dotplot(feature = feature_for_plot)
+ggsave(paste0(path_output_file,"/plots_verteidigung/",feature_for_plot, "_mono_berlin_umap_fastMNN.png"), bg='transparent', dpi=800)
+```
+
+
+```{r}
+feature_for_plot <- ("S100A9")
+mnn_umap_dotplot(feature = feature_for_plot)
+ggsave(paste0(path_output_file,"/plots_verteidigung/",feature_for_plot, "_mono_berlin_umap_fastMNN.png"), bg='transparent', dpi=800)
+```
+
+
+```{r}
+obj$calprotectin <- collect_features(source =obj@assays$RNA$data,features = c("S100A8","S100A9","S100A12") )|> mutate(sum_scaled = rowSums(across(where(is.numeric)))) |> pull(sum_scaled)
+
+
+feature_for_plot <- ("calprotectin")
+mnn_umap_dotplot(feature = feature_for_plot, title = "Calprotectin (S100A8+S100A9+S100A12)", from_meta_data = TRUE)
+ggsave(paste0(path_output_file,"/plots_verteidigung/",feature_for_plot, "_mono_berlin_umap_fastMNN.png"), bg='transparent', dpi=800)
+```
+
+
+```{r}
+############ HLA2
+HLA2_genes <- c("HLA-DRB1",
+"HLA-DRA",
+"CD74",
+"HLA-DPB1",
+"HLA-DMA",
+"HLA-DMB",
+"HLA-DQB1",
+"HLA-DRB5",
+"HLA-DQA1",
+'B2M')
+hla_tbl <- collect_features(source =obj@assays$RNA$data,features = HLA2_genes )
+hla_tbl <-hla_tbl |> janitor::clean_names()
+obj$hla2_gene_sum <-  hla_tbl |>  mutate(sum = rowSums(across(where(is.numeric)))) |> pull(sum)
+
+obj$hla2_gene_sum_scaled <-  hla_tbl |>
+  mutate(across(everything(), ~ .x / max(.x, na.rm = TRUE))) |> 
+  mutate(sum_scaled = rowSums(across(where(is.numeric)))) |> pull(sum_scaled)
+
+feature_for_plot <- ("hla2_gene_sum_scaled")
+mnn_umap_dotplot(feature = feature_for_plot, title = "HLA type 2 (gene sum)", from_meta_data = TRUE)
+ggsave(paste0(path_output_file,"/plots_verteidigung/",feature_for_plot, "_mono_berlin_umap_fastMNN.png"), bg='transparent', dpi=800)
+
+```
+```{r}
+feature_for_plot <- ("calprotectin")
+mnn_umap_dotplot(feature = feature_for_plot, title = "Calprotectin (S100A8+S100A9+S100A12)", from_meta_data = TRUE)
+ggsave(paste0(path_output_file,"/plots_verteidigung/",feature_for_plot, "_mono_berlin_umap_fastMNN.png"), p2, bg='transparent', dpi=800)
+```
+```{r}
+dings <- obj |> select(calprotectin, hla2_gene_sum_scaled) |> pivot_longer(cols = everything(), names_to = "feature")
+
+dings |> ggplot(aes(feature,value, colour = fea))+
+  geom_point()
+
+
+obj |> select(calprotectin, hla2_gene_sum_scaled) |> ggplot(aes(calprotectin,hla2_gene_sum_scaled))+ geom_point(size=0.03)+
+  geom_smooth(method='lm')+ 
+  coord_fixed()+ggdark::dark_theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,family = "Calibri", size=18),
+        plot.subtitle = element_text(hjust = 0.5,family = "Calibri", size=11),
+        title = element_text(family = "Calibri"),
+        text = element_text(family = "Calibri"),
+        axis.title = element_text(size=12))
+  
+```
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10055147/
+```{r}
+devtools::install_github("landerlabcode/BigSurR")
+
+library(BigSur)
+#Calculate the differential sequencing depths using the original seurat object
+obj <- obj[, sample(colnames(obj), size =1000, replace=F)]
+
+obj <- CreateSeuratObject(obj@assays$RNA@layers$counts, min.cells=1)
+
+depths <- depth.scaling(obj, assay="RNA")
+
+#Subset the seurat object to contain only genes of interest
+genes.list <- VariableFeatures(obj)
+
+example.seurat.subset <- subset(obj, features=genes.list)
+
+
+#Run BigSur on the subsetted data with the depths vector as a parameter
+library(Rmpfr)
+
+output <- BigSur(example.seurat.subset, variable.features = F, correlations=T, depthlist = depths)
+
+
+library(logr)
+obj <- obj[, sample(colnames(obj), size =1000, replace=F)]
+
+obj <- CreateSeuratObject(obj@assays$RNA@layers$counts, min.cells=1)
+obj <- NULL
+gc()
+example.output <- BigSur(example.seurat, variable.feature=T, correlations=T)
+
+
+```
+
