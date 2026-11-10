@@ -8,3 +8,11 @@ output/
 /data
 *.html
 *.pdf
+
+# intermediate and generated files
+intermediate_data/
+*.rds
+*.Rds
+*.tiff
+*.log
+*.msg
