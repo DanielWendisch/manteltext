@@ -43,3 +43,7 @@ Intermediate results and figures are written to `intermediate_data/` and `output
 R with Seurat, tidyverse, tidyseurat, DESeq2, here, janitor, ggrepel, ggpubr, effsize, patchwork and readxl. Python with [scCODA](https://github.com/theislab/scCODA), pandas and matplotlib. No lockfile was kept for this project.
 
 Open `manteltext_git.Rproj` so that `here::here()` resolves to the project root.
+
+## License
+
+[MIT](LICENSE)
