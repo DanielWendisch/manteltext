@@ -112,7 +112,7 @@ geom_label_repel(data = filter(res_highlight, highlight!= "not"),
 
 ## load data
 ```{r paths}
-path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_data_file <- paste0(here::here("..", "..", "raw_data", "schulte_schrepping_et_al"), "/")
 path_output_file <- "..\\output\\"
 ```
 

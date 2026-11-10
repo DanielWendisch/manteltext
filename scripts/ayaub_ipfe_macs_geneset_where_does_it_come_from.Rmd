@@ -74,7 +74,7 @@ woher_kommen_diese_gene
 
 ```{r}
 
-    dictionary_raw <- readxl::read_excel("C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\oli_github\\genesets.xlsx")
+    dictionary_raw <- readxl::read_excel(here::here("..", "..", "raw_data", "wendisch_et_al_final", "oli_github", "genesets.xlsx"))
 ```
 
 

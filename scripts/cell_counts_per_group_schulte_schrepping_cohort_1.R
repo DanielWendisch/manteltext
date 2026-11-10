@@ -3,11 +3,11 @@ library(tidyverse)
 library(readxl)
 library(Seurat)
 library(janitor)
-setwd("C:/Users/danne/R_projects/manteltext_git/scripts")
+setwd(here::here("scripts"))
 
-path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_data_file <- paste0(here::here("..", "..", "raw_data", "schulte_schrepping_et_al"), "/")
 path_output_file <- "..\\output\\"
-path_raw_data <- "C:/Users/danne/raw_data/"
+path_raw_data <- paste0(here::here("..", "..", "raw_data"), "/")
 seurat_c1_full_FG <- readRDS(paste0(path_raw_data,
                                     "schulte_schrepping_et_al/seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
 Idents(seurat_c1_full_FG) <- "RNA_snn_res.0.4"

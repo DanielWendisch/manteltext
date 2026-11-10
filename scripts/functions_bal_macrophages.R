@@ -25,7 +25,7 @@ genifiy_2<- function(gene){
   names(symb) <- BAL_macrophages@misc$features$ENSEMBL
   return(symb[gene])
 }
-load_clean_bal_seurat <- function(path_="C:/Users/danne/raw_data/wendisch_et_al_final/oli_github/BAL-macrophages.Rds"){
+load_clean_bal_seurat <- function(path_=here::here("..", "..", "raw_data", "wendisch_et_al_final", "oli_github", "BAL-macrophages.Rds")){
   BAL_macrophages <- readRDS(path_)
   #get rid of special characeters and greek letters that harm downstream functions
   BAL_macrophages$ClusternonASCII <- BAL_macrophages$Cluster
@@ -38,7 +38,7 @@ load_clean_bal_seurat <- function(path_="C:/Users/danne/raw_data/wendisch_et_al_
   levels(Idents(BAL_macrophages)) <- c("Monocytes" , "MonoM", "CD163LGMNM" ,"AM1",  "AM2", "ProlifAM" )
   return(BAL_macrophages)}
 ###############################
-load_clean_dictionary <- function(path_="C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\oli_github\\genesets.xlsx"){
+load_clean_dictionary <- function(path_=here::here("..", "..", "raw_data", "wendisch_et_al_final", "oli_github", "genesets.xlsx")){
   
   file <- path_
     dictionary <- readxl::read_excel(file)

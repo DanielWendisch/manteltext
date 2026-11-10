@@ -20,7 +20,7 @@ BAL_macrophages@misc$colors$Cluster <- color.cluster
 
 
 
-path_data_file <- "C:\\Users\\danne\\raw_data\\"
+path_data_file <- paste0(here::here("..", "..", "raw_data"), "/")
 dictionary <- load_clean_dictionary(path_ = paste0(path_data_file,"wendisch_et_al_final\\oli_github\\genesets.xlsx"))
 genesets_covid <- make_genesets(dictionary = dictionary, key = "COVID-19")
 dict_covid <- make_dict(dictionary = dictionary, key = "COVID-19")

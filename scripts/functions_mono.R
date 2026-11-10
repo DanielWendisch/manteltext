@@ -125,7 +125,7 @@ dot_plot_condition_seur <- function(genes_sorted, seur_obj, grouping_){
 }
 
 #####intitalize
-dictionary <- load_clean_dictionary(path_ = "C:\\Users\\danne\\raw_data\\wendisch_et_al_final\\oli_github\\genesets.xlsx")
+dictionary <- load_clean_dictionary(path_ = here::here("..", "..", "raw_data", "wendisch_et_al_final", "oli_github", "genesets.xlsx"))
 genesets_covid <- make_genesets(dictionary = dictionary, key = "COVID-19")
 dict_covid <- make_dict(dictionary = dictionary, key = "COVID-19")
 

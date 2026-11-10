@@ -27,12 +27,12 @@ library(wesanderson)
 
 ### file paths
 ```{r}
-path_melc_seurat <- "C:\\Users\\Danne\\raw_data\\wendisch_et_al_final\\MELC\\2021-03-30_COVID_MELC.Rds"
-path_source_id_dpso_pa_covid_id <- "C:\\Users\\Danne\\raw_data\\wendisch_et_al_final\\MELC\\source_id_dpso_pa_covid_id_fov_no.rds"
-path_all_myeloid_combined <- "C:\\Users\\Danne\\raw_data\\wendisch_et_al_final\\MELC\\2021_05_27_all_myeloid_combined_RIGHT_LOCATION.rds"
-path_fov_to_tif <- "C:\\Users\\Danne\\raw_data\\wendisch_et_al_final\\MELC\\fov_to_tif.rds"
-path_dist_tbl <- "C:\\Users\\Danne\\raw_data\\wendisch_et_al_final\\MELC\\dist_tbl_all_myeloid.rds"
-path_file_MELC_Col4 <- "C:/Users/Danne/OneDrive - Charité - Universitätsmedizin Berlin/Daniel/CoV/Wendisch_et_al/Experiments/Patho-Histo/MELC_Col4/"
+path_melc_seurat <- here::here("..", "..", "raw_data", "wendisch_et_al_final", "MELC", "2021-03-30_COVID_MELC.Rds")
+path_source_id_dpso_pa_covid_id <- here::here("..", "..", "raw_data", "wendisch_et_al_final", "MELC", "source_id_dpso_pa_covid_id_fov_no.rds")
+path_all_myeloid_combined <- here::here("..", "..", "raw_data", "wendisch_et_al_final", "MELC", "2021_05_27_all_myeloid_combined_RIGHT_LOCATION.rds")
+path_fov_to_tif <- here::here("..", "..", "raw_data", "wendisch_et_al_final", "MELC", "fov_to_tif.rds")
+path_dist_tbl <- here::here("..", "..", "raw_data", "wendisch_et_al_final", "MELC", "dist_tbl_all_myeloid.rds")
+path_file_MELC_Col4 <- "path/to/MELC_Col4/"  # location of the MELC Col4 images (not included)
 ```
 
 ### data joining
@@ -187,7 +187,7 @@ group_perc_plot(dat_false)
 ```{r localisation of Macs vs Col4}
 library(raster)
 library(sf)
-#path1 <- ("C:/Users/Danne/OneDrive - Charité - Universitätsmedizin Berlin/Daniel/CoV/Wendisch_et_al/Experiments/Patho-Histo/MELC_Col4/")
+#path1 <- ("path/to/MELC_Col4/")
 path1 <- path_file_MELC_Col4
 fov_to_tif_selected <- fov_to_tif[c(2,14,17)]
 fov_to_tif_selected <- fov_to_tif[15]

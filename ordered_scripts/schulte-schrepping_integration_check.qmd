@@ -18,9 +18,9 @@ loadfonts(device = "win")
 ```
 
 ```{r}
-path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_data_file <- paste0(here::here("..", "..", "raw_data", "schulte_schrepping_et_al"), "/")
 path_output_file <- "..\\output\\"
-setwd("C:/Users/Danne/R_projects/manteltext/")
+setwd(here::here())
 ```
 
 ```{r}
@@ -69,8 +69,8 @@ write_rds(obj, "intermediate_data/schulte_Schrepping_10x_berlin_sketched.rds")
 
 
 ```{r process unintegrated}
-if (!file.exists("C:/Users/Danne/R_projects/manteltext/intermediate_data/schulte_schrepping_berlin_monocytes_bpcells.rds")) {
-  obj <- read_rds("C:/Users/Danne/R_projects/manteltext/intermediate_data/schulte_schrepping_berlin_monocytes_bpcells.rds")
+if (!file.exists(here::here("intermediate_data", "schulte_schrepping_berlin_monocytes_bpcells.rds"))) {
+  obj <- read_rds(here::here("intermediate_data", "schulte_schrepping_berlin_monocytes_bpcells.rds"))
 keep <- obj |> count(sampleID) |> filter(n>100) |> pull(sampleID)
 obj <- obj |> filter(sampleID %in% keep)
 obj[["RNA"]] <- split(obj[["RNA"]], f = obj$sampleID)

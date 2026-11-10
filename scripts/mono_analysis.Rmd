@@ -16,7 +16,7 @@ source("functions_mono.R")
 
 ```{r}
 
-mono <- "C:/Users/Danne/raw_data/wendisch_et_al_final/oli_github/Monocytes.Rds" %>% read_rds()
+mono <- here::here("..", "..", "raw_data", "wendisch_et_al_final", "oli_github", "Monocytes.Rds") %>% read_rds()
 mono@assays$SCoV2@key <- "scov_"
 DefaultAssay(mono)<- "SCT"
 DefaultAssay(mono)<- "RNA"

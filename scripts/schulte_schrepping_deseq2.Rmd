@@ -56,7 +56,7 @@ make_idents_counts <- function(
 
 ```
 ```{r}
-path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_data_file <- paste0(here::here("..", "..", "raw_data", "schulte_schrepping_et_al"), "/")
 path_output_file <- ".\\output\\"
 ```
 

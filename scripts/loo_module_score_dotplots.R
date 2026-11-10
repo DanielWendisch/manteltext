@@ -5,7 +5,7 @@ print("start leave one out module score scropt")
 
 ###
 ### only recalulate if files doesn't exist yet
-if(!"scores_loo_corr.rds" %in% list.files("C:/Users/Danne/R_projects/manteltext_git/intermediate_data/")){
+if(!"scores_loo_corr.rds" %in% list.files(here::here("intermediate_data"))){
   print("not in abolute path, recalculate scores_loo_corr")
   print(getwd())
 
@@ -107,7 +107,7 @@ saveRDS(scores_loo_corr,"intermediate_data/scores_loo_corr.rds")
 # reyf_clus1_loo_corr %>% mutate(Geneset=str_remove_all(Geneset,pattern="Reyf_Clus1_w_o_")) %>% ggplot(aes(fct_reorder(Geneset,avg_score_diff),avg_score_diff))+ geom_col()+theme(axis.text.x=element_text(angle = 90))  +coord_flip()
 # reyf_clus1_loo_corr
 
-scores_loo_corr <- read_rds("C:/Users/Danne/R_projects/manteltext/intermediate_data/scores_loo_corr.rds")
+scores_loo_corr <- read_rds(here::here("intermediate_data", "scores_loo_corr.rds"))
 
 # #calculate mean score
 # donor_clus_avg_scores_reyf_clus1_loo_corr <- scores_reyf_clus1_loo_corr %>%  mutate(

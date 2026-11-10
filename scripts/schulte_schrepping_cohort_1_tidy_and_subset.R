@@ -56,9 +56,9 @@ janitor_to_nice <- c( "cd8_t_3"="CD8_T_cells",
 )
 
 
-path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+path_data_file <- paste0(here::here("..", "..", "raw_data", "schulte_schrepping_et_al"), "/")
 path_output_file <- ".\\output\\"
-seurat_c1_full_FG <- readRDS("C:/Users/danne/raw_data/schulte_schrepping_et_al/seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds")
+seurat_c1_full_FG <- readRDS(here::here("..", "..", "raw_data", "schulte_schrepping_et_al", "seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
 Idents(seurat_c1_full_FG) <- "RNA_snn_res.0.4"
 
 new_cluster_names_clean <- make_clean_names(new_cluster_names)

@@ -41,8 +41,8 @@ size_ <- 6
 
 
 ```{r}
-setwd("C:/Users/Danne/R_projects/manteltext/scripts")
-path_data_file <- "C:\\Users\\danne\\raw_data\\schulte_schrepping_et_al\\"
+setwd(here::here("scripts"))
+path_data_file <- paste0(here::here("..", "..", "raw_data", "schulte_schrepping_et_al"), "/")
 path_output_file <- "..\\output\\"
 seurat_monocytes <-  read_rds(paste0(path_data_file,
                                      "schulte_schrepping_monocytes_from_seurat_COVID19_PBMC_cohort1_10x_jonas_FG_2020-08-15.rds"))
