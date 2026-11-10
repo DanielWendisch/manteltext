@@ -2,7 +2,8 @@
 
 Analysis code for the framing text (*Manteltext*) of a cumulative dissertation. It re-analyses single-cell data from two papers on severe COVID-19:
 
-- **Wendisch D**, Dietrich O, Mari T, *et al.* SARS-CoV-2 infection triggers profibrotic macrophage responses and lung fibrosis. *Cell* 184(26):6243–6261.e27 (2021). [doi:10.1016/j.cell.2021.11.033](https://doi.org/10.1016/j.cell.2021.11.033)
+- **Wendisch D**, Dietrich O, Mari T, *et al.* SARS-CoV-2 infection triggers profibrotic macrophage responses and lung fibrosis. *Cell* 184(26):6243–6261.e27 (2021). [doi:10.1016/j.cell.2021.11.033](https://doi.org/10.1016/j.cell.2021.11.033)  
+  Original analysis code: [saliba-lab/covid19-profibrotic-macrophages](https://github.com/saliba-lab/covid19-profibrotic-macrophages)
 - Schulte-Schrepping J, Reusch N, Paclik D, *et al.* (incl. Wendisch D). Severe COVID-19 is marked by a dysregulated myeloid cell compartment. *Cell* 182(6):1419–1440.e23 (2020). [doi:10.1016/j.cell.2020.08.001](https://doi.org/10.1016/j.cell.2020.08.001)
 
 > **Status: archived.** This is the analysis as it was for the thesis defense, kept for transparency. The input data are not included, so the notebooks will not run end-to-end without them.
