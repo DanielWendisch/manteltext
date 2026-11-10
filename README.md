@@ -9,7 +9,9 @@ Analysis code for the framing text (*Manteltext*) of a cumulative dissertation. 
 
 ## Collaboration
 
-The analysis was developed together with [Oliver Dietrich](https://github.com/OliverDietrich), second author of the 2021 paper, and builds on the work of the [Saliba lab](https://github.com/saliba-lab) (Single Cell Analysis team, [Helmholtz Institute for RNA-based Infection Research](https://www.helmholtz-hiri.de/en/research/organisation/teams/team/single-cell-analysis/), Würzburg; senior author A.-E. Saliba). The original analysis code of the 2021 paper is published there: [saliba-lab/covid19-profibrotic-macrophages](https://github.com/saliba-lab/covid19-profibrotic-macrophages) (MIT license). A related collection of BAL samples from patients with severe COVID-19 is in [saliba-lab/covid19-bal-atlas-integration](https://github.com/saliba-lab/covid19-bal-atlas-integration).
+This analysis was developed in close collaboration with [Oliver Dietrich](https://github.com/OliverDietrich), second author of the 2021 paper, and partially builds on his work.
+
+The original analysis code of the 2021 paper is published by the [Saliba lab](https://github.com/saliba-lab) (Single Cell Analysis team, [Helmholtz Institute for RNA-based Infection Research](https://www.helmholtz-hiri.de/en/research/organisation/teams/team/single-cell-analysis/), Würzburg): [saliba-lab/covid19-profibrotic-macrophages](https://github.com/saliba-lab/covid19-profibrotic-macrophages) (MIT license). A related collection of BAL samples from patients with severe COVID-19 is in [saliba-lab/covid19-bal-atlas-integration](https://github.com/saliba-lab/covid19-bal-atlas-integration).
 
 ## What is in here
 
