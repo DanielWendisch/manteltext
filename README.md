@@ -7,6 +7,10 @@ Analysis code for the framing text (*Manteltext*) of a cumulative dissertation. 
 
 > **Status: archived.** This is the analysis as it was for the thesis defense, kept for transparency. The input data are not included, so the notebooks will not run end-to-end without them.
 
+## Collaboration
+
+The analysis was developed together with [Oliver Dietrich](https://github.com/OliverDietrich), second author of the 2021 paper.
+
 ## What is in here
 
 | Folder | Contents |

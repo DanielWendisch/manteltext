@@ -39,7 +39,7 @@ path_file_MELC_Col4 <- "path/to/MELC_Col4/"  # location of the MELC Col4 images 
 ```{r}
 
 ds <- readRDS(path_melc_seurat)
-ds$Cluster[ds$Cluster == "CD163+ Macrophages"] <- "Macrophages" # Oliver.Dietrich@helmholtz-hiri.de email 20.05.2021
+ds$Cluster[ds$Cluster == "CD163+ Macrophages"] <- "Macrophages" # per email from O. Dietrich, 20.05.2021
 
 data <- data.frame(
   CD163   = ds@assays$MELC@data["CD163", ],
