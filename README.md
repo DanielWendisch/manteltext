@@ -9,7 +9,7 @@ Analysis code for the framing text (*Manteltext*) of a cumulative dissertation. 
 
 ## Collaboration
 
-The analysis was developed together with [Oliver Dietrich](https://github.com/OliverDietrich), second author of the 2021 paper.
+The analysis was developed together with [Oliver Dietrich](https://github.com/OliverDietrich), second author of the 2021 paper, and builds on the work of the [Saliba lab](https://github.com/saliba-lab) (Single Cell Analysis team, [Helmholtz Institute for RNA-based Infection Research](https://www.helmholtz-hiri.de/en/research/organisation/teams/team/single-cell-analysis/), Würzburg; senior author A.-E. Saliba). The original analysis code of the 2021 paper is published there: [saliba-lab/covid19-profibrotic-macrophages](https://github.com/saliba-lab/covid19-profibrotic-macrophages) (MIT license). A related collection of BAL samples from patients with severe COVID-19 is in [saliba-lab/covid19-bal-atlas-integration](https://github.com/saliba-lab/covid19-bal-atlas-integration).
 
 ## What is in here
 
@@ -23,7 +23,7 @@ The analysis was developed together with [Oliver Dietrich](https://github.com/Ol
 
 ## Data
 
-Raw and processed input data are not part of this repository. They come from the two publications above (see each paper's data availability statement). Scripts expect them in a sibling folder two levels above the project:
+Raw and processed input data are not part of this repository. They come from the two publications above (see each paper's data availability statement). For the 2021 paper, the Saliba lab repository above describes where the count matrices and Seurat objects are stored. Scripts expect them in a sibling folder two levels above the project:
 
 ```
 <parent>/
